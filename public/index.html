@@ -76,7 +76,7 @@
           <div class="panel-head"><h3>Market Analysis</h3><div class="analysis-controls"><select id="selected-market"><option>Connecting to Deriv API...</option></select><select id="timeframe"><option value="60">1 Minute</option><option value="300" selected>5 Minutes</option><option value="900">15 Minutes</option><option value="3600">1 Hour</option><option value="14400">4 Hours</option></select></div>
           <div class="price-line"><span id="selected-market-name">Waiting for Deriv market...</span><strong id="market-api-status">CONNECTING TO DERIV API...</strong></div>
           <div class="price-line"><span>LIVE PRICE</span><strong id="analysis-price">—</strong></div>
-          <div id="chart" class="chart"></div>
+          <div id="chart" class="chart"></div><div id="trade-plan" class="trade-plan"><div><span>SIGNAL PLAN</span><b id="plan-side">WAIT</b></div><div><span>ENTRY</span><b id="plan-entry">—</b></div><div><span>STOP LOSS</span><b id="plan-sl">—</b></div><div><span>TAKE PROFIT</span><b id="plan-tp">—</b></div><div><span>RISK / REWARD</span><b id="plan-rr">—</b></div></div>
           <div class="analysis-grid">
             <div><span>TREND</span><b id="a-trend">—</b></div><div><span>MOMENTUM</span><b id="a-momentum">—</b></div><div><span>RSI</span><b id="a-rsi">—</b></div><div><span>SMA 20</span><b id="a-sma20">—</b></div><div><span>SMA 50</span><b id="a-sma50">—</b></div><div><span>SUPPORT</span><b id="a-support">—</b></div><div><span>RESISTANCE</span><b id="a-resistance">—</b></div><div><span>SIGNAL</span><b id="a-signal">WAIT</b></div>
           </div>
@@ -86,7 +86,7 @@
 
       <section id="tab-markets" class="tab"><div class="panel"><div class="panel-head"><h3>All Deriv Markets</h3><span id="market-scan-status">Waiting...</span></div><p class="muted">Scans the currently active Deriv symbols and calculates technical BUY / SELL / WAIT signals from recent candles. Analysis only.</p><div id="market-summary" class="market-summary"></div><div id="market-list" class="market-list"><div class="empty">Waiting for Deriv market symbols...</div></div></div></section><section id="tab-bot" class="tab">
         <div class="grid two">
-          <article class="panel center"><h3>Auto Trading</h3><div id="bot-switch" class="switch off"><i></i></div><p class="muted">Only confirmed STRONG signals can queue an MT5 order.</p><button id="bot-toggle" class="primary">START BOT</button></article>
+          <article class="panel center"><h3>Auto Trading</h3><div id="bot-switch" class="switch off"><i></i></div><p class="muted">Monitors confirmed Gold signals and applies risk checks. Live orders require user confirmation.</p><button id="bot-toggle" class="primary">START MONITOR</button></article>
           <article class="panel"><h3>Execution Rules</h3><div class="row"><span>Maximum open</span><b id="b-max-open">2</b></div><div class="row"><span>Lot</span><b id="b-lot">0.01</b></div><div class="row"><span>SL</span><b id="b-sl">ON</b></div><div class="row"><span>TP</span><b id="b-tp">ON</b></div><div class="row"><span>Martingale</span><b>OFF</b></div><div class="row"><span>Unlimited recovery</span><b>OFF</b></div></article>
         </div>
       </section>
@@ -98,7 +98,7 @@
         <form id="settings-form" class="panel settings">
           <h3>Bot Settings</h3>
           <div class="form-grid">
-            <label>Auto Trade<input id="s-auto" type="checkbox"></label>
+            <label>Trade Monitor<input id="s-auto" type="checkbox"></label>
             <label>Lot Size<input id="s-lot" type="number" min="0.01" step="0.01"></label>
             <label>Maximum Open Trades<input id="s-max-open" type="number" min="1" max="20"></label>
             <label>Maximum BUY Trades<input id="s-max-buy" type="number" min="0"></label>
@@ -112,7 +112,7 @@
             <label>Maximum Spread Points<input id="s-spread" type="number" min="0"></label>
             <label>Allow BUY<input id="s-buy" type="checkbox"></label>
             <label>Allow SELL<input id="s-sell" type="checkbox"></label>
-            <label>Close On Opposite Signal<input id="s-opposite" type="checkbox"></label>
+            <label>Flag Opposite Signal<input id="s-opposite" type="checkbox"></label>
             <label>One Trade Per Signal<input id="s-one" type="checkbox"></label>
           </div>
           <button class="primary" type="submit">SAVE SETTINGS</button><span id="settings-msg" class="success"></span>

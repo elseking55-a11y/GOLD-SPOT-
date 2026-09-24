@@ -49,7 +49,7 @@
 
       <section id="tab-dashboard" class="tab active">
         <div class="grid cards">
-          <article class="card"><span>MT5</span><strong id="mt5-status">DISCONNECTED</strong><small id="mt5-broker">Connect your terminal</small></article>
+          <article class="card"><span>MT5</span><strong id="mt5-status">DISCONNECTED</strong><small id="mt5-broker">MetaApi Cloud — no local terminal required</small></article>
           <article class="card"><span>BALANCE</span><strong id="balance">—</strong><small>Actual MT5 account</small></article>
           <article class="card"><span>EQUITY</span><strong id="equity">—</strong><small>Actual MT5 account</small></article>
           <article class="card"><span>DAILY P/L</span><strong id="daily-pnl">$0.00</strong><small id="daily-trades">0 trades today</small></article>
@@ -141,10 +141,10 @@
 
       <section id="tab-mt5" class="tab">
         <form id="mt5-form" class="panel settings">
-          <h3>Connect MT5</h3><p class="muted">Gold analysis works without MT5. Connect MT5 only when you want your real balance, equity, positions, broker data, and live order execution. Your MT5 credentials are sent to the server and used only to configure the MetaApi cloud connection.</p>
+          <h3>Connect MT5 through MetaApi Cloud</h3><p class="muted">Gold analysis works without MT5. Connect MT5 only when you want your real balance, equity, positions, broker data, and live order execution. MetaApi runs the broker-side MT5 environment in the cloud, so the user does NOT need the MT5 Terminal open on a phone or computer.</p>
           <div class="form-grid"><label>Broker<input id="m-broker" placeholder="Broker name"></label><label>Server<input id="m-server" placeholder="Broker-Live"></label><label>MT5 Login<input id="m-login" inputmode="numeric" placeholder="Account number"></label><label>MT5 Password<input id="m-password" type="password" autocomplete="off" placeholder="MT5 password"></label></div>
           <button class="primary" type="submit">SAVE MT5 DETAILS</button>
-          <div class="mt5-guide"><b>MetaApi connection</b><ol><li>Enter your broker, MT5 server, login and password.</li><li>Tap SAVE MT5 DETAILS.</li><li>The server sends the account to MetaApi and waits for the broker connection.</li><li>When MetaApi reports CONNECTED, your real account data and broker-specific market data become available.</li></ol><p class="muted">Your MetaApi API token stays on the server as an environment variable; it is never placed in this page.</p></div>
+          <div class="mt5-guide"><b>MetaApi connection</b><ol><li>Enter your broker, MT5 server, login and password.</li><li>Tap SAVE MT5 DETAILS.</li><li>The server sends the account to MetaApi Cloud and waits for MetaApi to connect directly to the broker.</li><li>When MetaApi reports CONNECTED, your real account data and broker-specific market data become available. No local terminal is needed.</li></ol><p class="muted">Your MetaApi API token stays on the server as an environment variable; it is never placed in this page.</p></div>
           <div id="mt5-message" class="success"></div>
         </form>
       </section>

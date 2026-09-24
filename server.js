@@ -195,22 +195,43 @@ async function connectMetaAccount(userId, data) {
   if (!u) return;
   if (!metaApi) {
     u.mt5.setupStatus = "ERROR";
+    u.mt5.connectionStatus = "ERROR";
     u.mt5.error = "METAAPI_TOKEN is not configured on the server.";
     return;
   }
+
   try {
     const login = clean(data.login, 40);
     const server = clean(data.server, 100);
     const broker = clean(data.broker, 80);
     const password = String(data.password || "").trim();
-    if (!login || !server || !password) throw new Error("MT5 login, password and server are required.");
-    u.mt5 = { ...u.mt5, broker, server, login, connected: false, connectionStatus: "CONNECTING", setupStatus: "CONNECTING", error: "" };
+    if (!login || !server || !password) {
+      throw new Error("Enter the MT5 account number, master password and exact broker server name.");
+    }
 
-    const accounts = await metaApi.metatraderAccountApi.getAccountsWithInfiniteScrollPagination();
-    let account = accounts.find(a => String(a.login) === login && String(a.server || "").toLowerCase() === server.toLowerCase() && String(a.type || "").startsWith("cloud"));
+    u.mt5 = {
+      ...u.mt5, broker, server, login, connected:false,
+      connectionStatus:"CONNECTING", setupStatus:"CONNECTING", error:""
+    };
+
+    // MULTI-USER: never attach one user's login to another user's MetaApi account.
+    // Reuse only the MetaApi account ID previously assigned to THIS application user.
+    let account = null;
+    if (u.mt5.accountId) {
+      try {
+        account = await metaApi.metatraderAccountApi.getAccount(String(u.mt5.accountId));
+        if (String(account.login || "") !== login ||
+            String(account.server || "").toLowerCase() !== server.toLowerCase()) {
+          account = null;
+        }
+      } catch (_) {
+        account = null;
+      }
+    }
+
     if (!account) {
       account = await metaApi.metatraderAccountApi.createAccount({
-        name: "Gold Spot " + login,
+        name: "GOLD-SPOT user " + userId + " MT5",
         type: "cloud-g2",
         login,
         password,
@@ -218,9 +239,13 @@ async function connectMetaAccount(userId, data) {
         platform: "mt5",
         magic: 0,
         manualTrades: true,
-        quoteStreamingIntervalInSeconds: 0
+        quoteStreamingIntervalInSeconds: 0,
+        reliability: "high"
       });
     }
+
+    // MetaApi deploys and runs the broker-side MT terminal in its cloud.
+    // The user does NOT need MetaTrader/MT5 Terminal running on their phone or PC.
     await account.deploy();
     await account.waitConnected();
 
@@ -229,27 +254,49 @@ async function connectMetaAccount(userId, data) {
     await connection.waitSynchronized();
 
     const info = await connection.getAccountInformation();
-    metaConnections.set(userId, { account, connection, symbols: null, symbol: null, connectedAt: Date.now() });
+    const tradeAllowed = info.tradeAllowed !== false && info.investorMode !== true;
+
+    metaConnections.set(userId, {
+      account, connection, symbols:null, symbol:null, connectedAt:Date.now()
+    });
 
     u.mt5 = {
       ...u.mt5,
-      connected: true,
-      connectionStatus: "CONNECTED",
-      setupStatus: "READY",
-      accountId: account.id,
-      balance: Number(info.balance),
-      equity: Number(info.equity),
-      lastSeen: new Date().toISOString(),
-      error: ""
+      connected:true,
+      connectionStatus:"CONNECTED",
+      setupStatus:"READY",
+      accountId:account.id,
+      balance:Number(info.balance),
+      equity:Number(info.equity),
+      tradeAllowed,
+      lastSeen:new Date().toISOString(),
+      error:""
     };
   } catch (err) {
-    u.mt5.connected = false;
-    u.mt5.connectionStatus = "ERROR";
-    u.mt5.setupStatus = "ERROR";
-    u.mt5.error = clean(err?.message || err?.details || "MetaApi connection failed", 300);
+    const details = err?.details;
+    const raw = String(err?.message || err || "MetaApi connection failed");
+    let message = raw;
+
+    if (raw.includes("E_AUTH") || /authenticate|invalid account|account disabled/i.test(raw)) {
+      message = "MetaApi could not authenticate this MT5 account. Check the MT5 master password and the exact broker server name. No MT5 Terminal is required.";
+    } else if (raw.includes("E_SRV_NOT_FOUND")) {
+      message = "MetaApi could not find that broker server. Use the exact MT5 server name shown by your broker.";
+    } else if (raw.includes("E_SERVER_TIMEZONE")) {
+      message = "MetaApi could not detect this broker's server settings. A MetaApi provisioning profile is required for this broker.";
+    } else if (raw.includes("E_RESOURCE_SLOTS")) {
+      message = "MetaApi needs additional account resource capacity for this broker/account.";
+    } else if (raw.includes("ERR_OTP_REQUIRED")) {
+      message = "This MT5 account requires OTP. MetaApi cannot use an OTP-protected account; disable OTP or use an account without it.";
+    } else if (/investor/i.test(raw)) {
+      message = "The MT5 password is read-only/investor access. Use the master trading password for live execution.";
+    }
+
+    u.mt5.connected=false;
+    u.mt5.connectionStatus="ERROR";
+    u.mt5.setupStatus="ERROR";
+    u.mt5.error=clean(message + (details && !String(message).includes(String(details)) ? " ["+String(details)+"]" : ""),500);
   }
 }
-
 app.post("/api/mt5/connect", (req, res) => {
   const s = auth(req);
   if (!s) return res.status(401).json({ ok: false, error: "Unauthorized" });

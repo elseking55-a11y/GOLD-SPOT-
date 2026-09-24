@@ -118,7 +118,7 @@ app.post("/api/access", (req, res) => {
       settings: defaultSettings(),
       positions: [],
       history: [],
-      mt5: { connected: false, login: "", broker: "", server: "", balance: null, equity: null, lastSeen: null, accountId: null, connectionStatus: "DISCONNECTED", setupStatus: "NOT_CONFIGURED", error: "" },
+      mt5: { connected: false, login: "", broker: "", server: "", balance: null, equity: null, lastSeen: null, accountId: null, connectionStatus: "DISCONNECTED", setupStatus: "NOT_CONFIGURED", tradeAllowed: false, error: "" },
       lastSignal: { side: "WAIT", strength: "NONE", price: null, at: null },
       lastSignalId: null
     });
@@ -141,6 +141,7 @@ app.get("/api/me", async (req, res) => {
       ]);
       u.mt5.balance = Number(info.balance);
       u.mt5.equity = Number(info.equity);
+      u.mt5.tradeAllowed = info.tradeAllowed !== false && info.investorMode !== true;
       u.mt5.lastSeen = new Date().toISOString();
       u.positions = Array.isArray(positions) ? positions.map(p => ({
         ticket: String(p.id || p.ticket || ""),
@@ -298,27 +299,47 @@ app.get("/api/market/data", async (req, res) => {
     }
   }
 
-  // No broker is required for analysis. XAUUSD is read from Yahoo Finance's
-  // public market chart feed; this feed may be delayed and is not a broker quote.
-  const yahooSymbol = "XAUUSD=X";
+  // No broker is required for Gold analysis. Use a real public XAU/USD feed.
+  // When MT5 is connected above, broker quotes take precedence for trading-related analysis.
   try {
-    const url="https://query1.finance.yahoo.com/v8/finance/chart/"+encodeURIComponent(yahooSymbol)+
-      "?range=1d&interval=1m&events=history";
-    const rr=await fetch(url,{headers:{"User-Agent":"Mozilla/5.0","Accept":"application/json"}});
-    if (!rr.ok) throw new Error("Public gold market feed unavailable");
-    const j=await rr.json(), result=j?.chart?.result?.[0];
-    if (!result?.timestamp?.length) throw new Error("No XAUUSD market data returned by the public feed");
-    const q=result.indicators?.quote?.[0]||{};
-    const candles=result.timestamp.map((t,i)=>({
-      time:Number(t)*1000, open:Number(q.open?.[i]), high:Number(q.high?.[i]),
-      low:Number(q.low?.[i]), close:Number(q.close?.[i]), volume:Number(q.volume?.[i]||0)
-    })).filter(x=>Number.isFinite(x.close));
-    const last=candles.at(-1)?.close;
-    return res.json({ok:true,source:"Public XAU/USD feed",live:true,symbol:"XAUUSD",price:{bid:last,ask:last},candles});
-  } catch (err) {
-    return res.status(502).json({ok:false,error:clean(err?.message||"Gold market data unavailable. Try again shortly.",300)});
+    const rr=await fetch("https://xaus.com/api/v1/intraday?symbol=xau&hours=24",{headers:{"Accept":"application/json","User-Agent":"GOLD-SPOT/1.0"}});
+    if(!rr.ok) throw new Error("Public XAU/USD feed unavailable");
+    const j=await rr.json();
+    const points=Array.isArray(j.points)?j.points:[];
+    const candles=points.map((p,i)=>({
+      time:new Date(p.t||p.time).getTime(),
+      open:Number(p.p??p.price),
+      high:Number(p.p??p.price),
+      low:Number(p.p??p.price),
+      close:Number(p.p??p.price),
+      volume:1
+    })).filter(x=>Number.isFinite(x.time)&&Number.isFinite(x.close));
+    if(!candles.length) throw new Error("No XAU/USD data returned");
+    const last=candles.at(-1).close;
+    return res.json({
+      ok:true,source:"Public XAU/USD live feed",live:true,symbol:"XAUUSD",
+      price:{bid:last,ask:last},candles,
+      freshness:j.data_state||null,priceAsOf:j.price_as_of||j.updated_at||null
+    });
+  } catch (xausErr) {
+    // Last fallback only: Yahoo's public chart endpoint. It is explicitly labelled as fallback data.
+    try {
+      const url="https://query1.finance.yahoo.com/v8/finance/chart/XAUUSD=X?range=1d&interval=1m&events=history";
+      const rr=await fetch(url,{headers:{"User-Agent":"GOLD-SPOT/1.0","Accept":"application/json"}});
+      if(!rr.ok) throw new Error("Gold market feed unavailable");
+      const j=await rr.json(), result=j?.chart?.result?.[0];
+      if(!result?.timestamp?.length) throw new Error("No XAUUSD fallback data returned");
+      const q=result.indicators?.quote?.[0]||{};
+      const candles=result.timestamp.map((t,i)=>({
+        time:Number(t)*1000,open:Number(q.open?.[i]),high:Number(q.high?.[i]),
+        low:Number(q.low?.[i]),close:Number(q.close?.[i]),volume:Number(q.volume?.[i]||0)
+      })).filter(x=>Number.isFinite(x.close));
+      const last=candles.at(-1)?.close;
+      return res.json({ok:true,source:"Public XAU/USD fallback",live:false,symbol:"XAUUSD",price:{bid:last,ask:last},candles});
+    } catch (err) {
+      return res.status(502).json({ok:false,error:clean(err?.message||"Gold market data unavailable. Try again shortly.",300)});
+    }
   }
-});
 
 app.get("/api/market/symbols", async (req, res) => {
   const s = auth(req);
@@ -331,7 +352,7 @@ app.get("/api/market/symbols", async (req, res) => {
       return res.json({ok:true,source:"MetaApi",symbols:specs});
     } catch {}
   }
-  return res.json({ok:true,source:"Public market feed",symbols:[{symbol:"XAUUSD",name:"Gold / US Dollar"}]});
+  return res.json({ok:true,source:"Public XAU/USD",symbols:[{symbol:"XAUUSD",name:"Gold / US Dollar"}]});
 });
 
 async function executeLiveOrder(user, side, symbol, signalId) {

@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: gold-spot-analysis
+    runtime: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: ACCESS_KEYS
+        sync: false
+      - key: SESSION_TTL_HOURS
+        value: "24"
+      - key: CORS_ORIGIN
+        value: "*"

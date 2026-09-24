@@ -278,6 +278,6 @@ app.get("/api/state", (req, res) => {
   res.json({ ok: true, user: u, daily: dailyStats(u), commandPending: commands.has(u.id) });
 });
 
-app.get("*", (_req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
+app.use((_req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
 
 app.listen(PORT, () => console.log("GOLD SPOT ANALYSIS running on port " + PORT));

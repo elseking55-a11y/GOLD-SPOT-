@@ -153,6 +153,26 @@ app.get("/api/me", async (req, res) => {
         status: "OPEN",
         openedAt: p.time ? new Date(p.time).toISOString() : null
       })) : [];
+      try {
+        const deals = await c.connection.getDealsByTimeRange(new Date(Date.now()-7*24*60*60*1000), new Date());
+        u.history = (Array.isArray(deals) ? deals : [])
+          .filter(d => Number(d.profit || 0) !== 0 || String(d.entry || "").toUpperCase().includes("OUT"))
+          .map(d => {
+            const t = d.time ? new Date(d.time) : new Date();
+            const side = String(d.type || "").toUpperCase().includes("SELL") ? "SELL" : "BUY";
+            return {
+              date:t.toISOString().slice(0,10),
+              ticket:String(d.id || d.ticket || ""),
+              symbol:String(d.symbol || ""),
+              side,
+              lot:Number(d.volume || 0),
+              pnl:Number(d.profit || 0)+Number(d.swap || 0)+Number(d.commission || 0),
+              closedAt:t.toISOString(),
+              source:"MetaApi"
+            };
+          });
+      } catch {}
+
     } catch (err) {
       u.mt5.lastSeen = new Date().toISOString();
       u.mt5.error = clean(err?.message || "MetaApi account refresh failed", 300);

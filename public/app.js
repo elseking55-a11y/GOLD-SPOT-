@@ -22,8 +22,8 @@ async function refreshMetaMarket(){try{
   $("meta-status").textContent="MetaApi connected • "+symbol;
   $("meta-dot").className="dot live";
 }catch(err){
-  $("deriv-dot").className="dot bad";
-  $("deriv-status").textContent=err.message||"MetaApi market data unavailable";
+  $("MetaApi-dot").className="dot bad";
+  $("MetaApi-status").textContent=err.message||"MetaApi market data unavailable";
   $("market-api-status").textContent="WAITING FOR MT5";
 }}
 function aggregateCandles(candles,seconds){
@@ -51,7 +51,7 @@ async function loadMetaMarkets(){
     renderMetaMarkets();
   }catch(err){
     $("market-api-status").textContent="MT5 NOT CONNECTED";
-    $("deriv-status").textContent=err.message||"Connect MT5 through MetaApi";
+    $("MetaApi-status").textContent=err.message||"Connect MT5 through MetaApi";
     $("market-list").innerHTML='<div class="empty">Connect an MT5 account to MetaApi to load broker markets.</div>';
   }
 }
@@ -89,6 +89,6 @@ $("dashboard-toggle").onclick=async()=>setBot(!state.user.settings.autoTrade);$(
 $("settings-form").addEventListener("submit",async e=>{e.preventDefault();const p=settingsPayload();if(p.autoTrade&&!state.user?.mt5?.connected){p.autoTrade=false;$("s-auto").checked=false;toast("MT5 must be connected before Trade Monitor can run.")}try{const r=await api("/api/settings",{method:"POST",body:JSON.stringify(p)});state.user.settings=r.settings;applyUser();$("settings-msg").textContent="Saved.";setTimeout(()=>$("settings-msg").textContent="",2500)}catch(err){$("settings-msg").textContent=err.message}});
 $("mt5-form").addEventListener("submit",async e=>{e.preventDefault();try{const r=await api("/api/mt5/connect",{method:"POST",body:JSON.stringify({broker:$("m-broker").value,server:$("m-server").value,login:$("m-login").value,password:$("m-password").value})});state.user.mt5=r.mt5;applyUser();$("mt5-message").textContent=r.message;let n=0;const poll=setInterval(async()=>{n++;try{const x=await api("/api/mt5/status");state.user.mt5=x.mt5;applyUser();if(x.mt5.setupStatus==="READY"||x.mt5.setupStatus==="ERROR"){clearInterval(poll);$("mt5-message").textContent=x.mt5.setupStatus==="READY"?"MetaApi MT5 connected.":"MetaApi: "+(x.mt5.error||"connection failed");if(x.mt5.setupStatus==="READY")loadMetaMarkets()}}catch{}if(n>=40)clearInterval(poll)},3000)}catch(err){$("mt5-message").textContent=err.message}});
 $("selected-market").onchange=()=>{state.symbol=$("selected-market").value;state.prices=[];state.candles=[];state.analysis=null;$("signal-side").textContent="WAIT";$("signal-strength").textContent="Loading market data...";$("market-api-status").textContent="CONNECTING";$("analysis-live-dot").className="";$("footer-live-dot").className="";refreshMetaMarket()};
-$("timeframe").onchange=()=>{requestHistory();if(state.user?.mt5?.connected)setTimeout(loadMetaMarkets,250)};
+$("timeframe").onchange=()=>{if(state.user?.mt5?.connected)refreshMetaMarket()};
 buildTicker();if(state.token)showApp();else $("access-screen").classList.remove("hidden");setInterval(refreshState,5000);
 setInterval(()=>{if(state.user?.mt5?.connected)loadMetaMarkets()},120000);

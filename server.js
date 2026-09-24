@@ -408,6 +408,8 @@ app.get("/api/market/data", async (req, res) => {
     }
   }
 
+});
+
 app.get("/api/market/symbols", async (req, res) => {
   const s = auth(req);
   if (!s) return res.status(401).json({ok:false,error:"Unauthorized"});

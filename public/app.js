@@ -10,22 +10,34 @@ function applyUser(){const u=state.user,s=u.settings;$("mt5-status").textContent
 function fillSettings(s){$("s-auto").checked=s.autoTrade;$("s-lot").value=s.lotSize;$("s-max-open").value=s.maxOpenTrades;$("s-max-buy").value=s.maxBuyTrades;$("s-max-sell").value=s.maxSellTrades;$("s-sl").checked=s.stopLoss;$("s-sl-points").value=s.stopLossPoints;$("s-tp").checked=s.takeProfit;$("s-tp-points").value=s.takeProfitPoints;$("s-daily-loss").value=s.maxDailyLoss;$("s-daily-trades").value=s.maxDailyTrades;$("s-spread").value=s.maxSpreadPoints;$("s-buy").checked=s.allowBuy;$("s-sell").checked=s.allowSell;$("s-opposite").checked=s.closeOnOppositeSignal;$("s-one").checked=s.oneTradePerSignal}
 function settingsPayload(){return{autoTrade:$("s-auto").checked,lotSize:Number($("s-lot").value),maxOpenTrades:Number($("s-max-open").value),maxBuyTrades:Number($("s-max-buy").value),maxSellTrades:Number($("s-max-sell").value),stopLoss:$("s-sl").checked,stopLossPoints:Number($("s-sl-points").value),takeProfit:$("s-tp").checked,takeProfitPoints:Number($("s-tp-points").value),maxDailyLoss:Number($("s-daily-loss").value),maxDailyTrades:Number($("s-daily-trades").value),maxSpreadPoints:Number($("s-spread").value),allowBuy:$("s-buy").checked,allowSell:$("s-sell").checked,closeOnOppositeSignal:$("s-opposite").checked,oneTradePerSignal:$("s-one").checked}}
 async function setBot(on){if(on&&!state.user?.mt5?.connected){toast("Connect MT5 first. Monitor is locked until MT5 is connected.");return}await api(on?"/api/bot/start":"/api/bot/stop",{method:"POST",body:"{}"});state.user.settings.autoTrade=on;applyUser()}
-async function refreshMetaMarket(){try{
-  const tf=Number($("timeframe").value)||300;
-  const symbol=state.symbol||"XAUUSD";
-  $("market-api-status").textContent="LOADING";
-  const r=await api("/api/market/data?symbol="+encodeURIComponent(symbol)+"&timeframe="+tf);
-  state.candles=aggregateCandles(r.candles||[],tf);
-  const p=Number(r.price?.bid ?? r.price?.ask);
-  if(Number.isFinite(p))updatePrice(p);
-  if(state.candles.length){$("market-api-status").textContent="METAAPI LIVE";$("analysis-candle-status").textContent=state.candles.length+" candles • MetaApi";calculateAnalysis();drawChart()}
-  $("meta-status").textContent="MetaApi connected • "+symbol;
-  $("meta-dot").className="dot live";
-}catch(err){
-  $("meta-dot").className="dot bad";
-  $("meta-status").textContent=err.message||"Public gold market data unavailable";
-  $("market-api-status").textContent="PUBLIC GOLD FEED";
-}}
+async function refreshMetaMarket(){
+  try{
+    const tf=Number($("timeframe").value)||300;
+    const symbol=state.symbol||"XAUUSD";
+    $("market-api-status").textContent="LOADING";
+    const r=await api("/api/market/data?symbol="+encodeURIComponent(symbol)+"&timeframe="+tf);
+    state.candles=aggregateCandles(r.candles||[],tf);
+    const p=Number(r.price?.bid ?? r.price?.ask);
+    if(Number.isFinite(p))updatePrice(p);
+    const liveSource=r.source==="MetaApi";
+    if(state.candles.length){
+      $("market-api-status").textContent=liveSource?"MT5 LIVE":"XAU/USD LIVE";
+      $("analysis-candle-status").textContent=state.candles.length+" candles • "+(liveSource?"MetaApi MT5":"public market feed");
+      $("analysis-live-dot").className="live";
+      $("footer-live-dot").className=liveSource?"live":"";
+      calculateAnalysis();
+      drawChart();
+    }
+    $("meta-status").textContent=liveSource?"MetaApi MT5 • "+symbol:"Public XAU/USD feed • MT5 optional";
+    $("meta-dot").className=liveSource?"dot live":"dot";
+  }catch(err){
+    $("meta-dot").className="dot bad";
+    $("meta-status").textContent=err.message||"Gold market data unavailable";
+    $("market-api-status").textContent="UNAVAILABLE";
+    $("analysis-live-dot").className="";
+    $("footer-live-dot").className="";
+  }
+}
 function aggregateCandles(candles,seconds){
   if(seconds<=60)return candles;
   const out=[]; const step=seconds*1000; const buckets=new Map();
@@ -43,31 +55,62 @@ async function loadMetaMarkets(){
   try{
     const r=await api("/api/market/symbols");
     const names=(r.symbols||[]).map(x=>typeof x==="string"?x:(x.symbol||x.name)).filter(Boolean);
-    state.markets=names.map(symbol=>({symbol,name:symbol,market:"MT5",open:true}));
+    const isMeta=r.source==="MetaApi";
+    state.marketSource=isMeta?"MetaApi":"Public XAU/USD";
+    state.markets=names.map(symbol=>({symbol,name:symbol,market:isMeta?"MT5":"XAU/USD",open:true}));
     const gold=state.markets.find(x=>/xau|gold/i.test(x.symbol))||state.markets.find(x=>/xau|gold/i.test(x.name));
-    state.symbol=gold?.symbol||state.markets[0]?.symbol||null;
+    state.symbol=gold?.symbol||state.markets[0]?.symbol||"XAUUSD";
     populateMarketSelect();
-    if(state.symbol){setSelectedMarketUI();await refreshMetaMarket()}
+    setSelectedMarketUI();
+    await refreshMetaMarket();
     renderMetaMarkets();
   }catch(err){
-    $("market-api-status").textContent="MT5 NOT CONNECTED";
-    $("meta-status").textContent=err.message||"Connect MT5 through MetaApi";
-    $("market-list").innerHTML='<div class="empty">Connect an MT5 account to MetaApi to load broker markets.</div>';
+    state.marketSource="Unavailable";
+    $("market-api-status").textContent="UNAVAILABLE";
+    $("meta-status").textContent=err.message||"Gold market data unavailable";
+    $("market-list").innerHTML='<div class="empty">Gold market data is temporarily unavailable.</div>';
   }
 }
 function renderMetaMarkets(){
   const list=state.markets||[];
-  $("market-summary").innerHTML='<div class="market-stat"><span>BROKER MARKETS</span><b>'+list.length+'</b></div><div class="market-stat"><span>SOURCE</span><b>MT5</b></div><div class="market-stat"><span>DATA</span><b>MetaApi</b></div><div class="market-stat"><span>STATUS</span><b>CONNECTED</b></div>';
+  const isMeta=state.marketSource==="MetaApi";
+  $("market-summary").innerHTML='<div class="market-stat"><span>MARKETS</span><b>'+list.length+'</b></div><div class="market-stat"><span>SOURCE</span><b>'+ (isMeta?"MT5":"PUBLIC GOLD") +'</b></div><div class="market-stat"><span>DATA</span><b>'+ (isMeta?"MetaApi":"XAU/USD") +'</b></div><div class="market-stat"><span>STATUS</span><b>'+ (isMeta?"CONNECTED":"AVAILABLE") +'</b></div>';
   $("market-list").innerHTML=list.length?'<div class="market-row market-head"><span>MARKET</span><span>TYPE</span><span>PRICE</span><span>STATUS</span><span>SOURCE</span><span>ACTION</span></div>'+list.map(x=>'<div class="market-row"><b>'+escapeHtml(x.name)+'</b><span>MT5</span><span>—</span><span>AVAILABLE</span><span>MetaApi</span><button class="ghost market-open" data-symbol="'+escapeHtml(x.symbol)+'">OPEN</button></div>').join(""):'<div class="empty">No MT5 markets returned.</div>';
   document.querySelectorAll(".market-open").forEach(b=>b.onclick=()=>{state.symbol=b.dataset.symbol;populateMarketSelect();setSelectedMarketUI();document.querySelector('[data-tab="analysis"]').click();refreshMetaMarket()});
 }
-function startMetaFeed(){loadMetaMarkets();refreshMetaMarket();if(state.metaTimer)clearInterval(state.metaTimer);state.metaTimer=setInterval(()=>{if(state.user?.mt5?.connected)refreshMetaMarket()},5000)}
+function startMetaFeed(){
+  loadMetaMarkets();
+  if(state.metaTimer)clearInterval(state.metaTimer);
+  state.metaTimer=setInterval(()=>refreshMetaMarket(),5000);
+}
 function setSelectedMarketUI(){const m=state.markets.find(x=>x.symbol===state.symbol);if(m){$("selected-market-name").textContent=m.name+" • "+m.symbol;$("selected-market").value=m.symbol}}
 function populateMarketSelect(){const s=$("selected-market");if(!s)return;s.innerHTML=state.markets.map(m=>"<option value=\""+escapeHtml(m.symbol)+"\">"+escapeHtml(m.name)+" ("+escapeHtml(m.symbol)+")</option>").join("");if(state.symbol)s.value=state.symbol;setSelectedMarketUI()}
 function sma(a,n){return a.length<n?null:a.slice(-n).reduce((x,y)=>x+y,0)/n}
 function rsi(a,n=14){if(a.length<n+1)return null;let g=0,l=0;for(let i=a.length-n;i<a.length;i++){const d=a[i]-a[i-1];d>=0?g+=d:l-=d}if(l===0)return 100;const rs=(g/n)/(l/n);return 100-100/(1+rs)}
 function momentum(a,n=10){return a.length<=n?0:a.at(-1)-a[a.length-1-n]}function atr(c,n=14){if(c.length<n+1)return null;let s=0;for(let i=c.length-n;i<c.length;i++){const p=Number(c[i-1].close),hi=Number(c[i].high),lo=Number(c[i].low);s+=Math.max(hi-lo,Math.abs(hi-p),Math.abs(lo-p))}return s/n}function buildTradePlan(a){if(!a||!Number.isFinite(a.last)||a.side==="WAIT")return null;const v=atr(state.candles)||Math.abs(a.resistance-a.support)/10||1,risk=Math.max(v*1.5,Math.abs(a.last)*0.0005*2);let sl,tp;if(a.side==="BUY"){sl=Math.min(a.last-risk,a.support);tp=a.last+risk*2}else{sl=Math.max(a.last+risk,a.resistance);tp=a.last-risk*2}return{side:a.side,entry:a.last,sl,tp,rr:2}}function updateTradePlan(a){const p=buildTradePlan(a);$("plan-side").textContent=p?p.side:"WAIT";$("plan-entry").textContent=p?p.entry.toFixed(2):"—";$("plan-sl").textContent=p?p.sl.toFixed(2):"—";$("plan-tp").textContent=p?p.tp.toFixed(2):"—";$("plan-rr").textContent=p?"1 : "+p.rr:"—";drawChart(p)}
-function calculateAnalysis(){const c=state.candles;if(c.length<20)return;const a=c.map(x=>Number(x.close)),last=a.at(-1),s20=sma(a,20),s50=sma(a,50),r=rsi(a),m=momentum(a),support=Math.min(...c.slice(-30).map(x=>x.low)),resistance=Math.max(...c.slice(-30).map(x=>x.high));let trend="NEUTRAL";if(s20&&s50)trend=s20>s50?"BULLISH":"BEARISH";let conf=0;if((trend==="BULLISH"&&m>0)||(trend==="BEARISH"&&m<0))conf++;if((trend==="BULLISH"&&r>50)||(trend==="BEARISH"&&r<50))conf++;if((trend==="BULLISH"&&last>s20)||(trend==="BEARISH"&&last<s20))conf++;const side=conf>=3?(trend==="BULLISH"?"BUY":"SELL"):"WAIT",strength=conf>=3?"STRONG":conf>=2?"MODERATE":"WAIT";state.analysis={last,s20,s50,r,m,support,resistance,trend,side,strength};updateAnalysisUI(state.analysis)}
+function calculateAnalysis(){
+  const c=state.candles;if(c.length<20)return;
+  const a=c.map(x=>Number(x.close)),last=a.at(-1),s20=sma(a,20),s50=sma(a,50),r=rsi(a),m=momentum(a),support=Math.min(...c.slice(-30).map(x=>x.low)),resistance=Math.max(...c.slice(-30).map(x=>x.high));
+  let trend="NEUTRAL";if(s20&&s50)trend=s20>s50?"BULLISH":"BEARISH";
+  let conf=0;if((trend==="BULLISH"&&m>0)||(trend==="BEARISH"&&m<0))conf++;
+  if((trend==="BULLISH"&&r>50)||(trend==="BEARISH"&&r<50))conf++;
+  if((trend==="BULLISH"&&last>s20)||(trend==="BEARISH"&&last<s20))conf++;
+  const side=conf>=3?(trend==="BULLISH"?"BUY":"SELL"):"WAIT",strength=conf>=3?"STRONG":conf>=2?"MODERATE":"WAIT";
+  state.analysis={last,s20,s50,r,m,support,resistance,trend,side,strength};
+  updateAnalysisUI(state.analysis);
+  maybeExecuteSignal(state.analysis);
+}
+async function maybeExecuteSignal(a){
+  if(!state.user?.settings?.autoTrade || !state.user?.mt5?.connected || a.side==="WAIT" || a.strength!=="STRONG")return;
+  const candle=state.candles.at(-1);
+  const signalId=[state.symbol||"XAUUSD",a.side,candle?.time||"0"].join("_");
+  if(state.lastSentSignal===signalId)return;
+  state.lastSentSignal=signalId;
+  try{
+    const r=await api("/api/signal",{method:"POST",body:JSON.stringify({side:a.side,strength:a.strength,symbol:state.symbol||"XAUUSD",price:a.last,signalId})});
+    if(r.executed)toast("LIVE "+a.side+" order executed at "+Number(r.execution.price).toFixed(2)+" • "+r.execution.lot+" lot");
+  }catch(err){toast("Live trade blocked: "+err.message)}
+}
 function updatePrice(p){$("price").textContent=p.toFixed(2);$("analysis-price").textContent=p.toFixed(2)}
 function updateAnalysisUI(a){updateTradePlan(a);$("trend").textContent=a.trend;$("rsi").textContent=a.r?.toFixed(1)||"—";$("a-trend").textContent=a.trend;$("a-momentum").textContent=a.m>0?"UP":"DOWN";$("a-rsi").textContent=a.r?.toFixed(1)||"—";$("a-sma20").textContent=a.s20?.toFixed(2)||"—";$("a-sma50").textContent=a.s50?.toFixed(2)||"—";$("a-support").textContent=a.support.toFixed(2);$("a-resistance").textContent=a.resistance.toFixed(2);$("a-signal").textContent=a.side;$("signal-side").textContent=a.side;$("signal-strength").textContent=a.strength;$("signal-box").className="signal "+a.side.toLowerCase();$("signal-time").textContent=new Date().toLocaleTimeString();drawChart()}
 function drawChart(plan=null){const e=$("chart"),c=state.candles.slice(-50);if(!c.length){e.innerHTML="";return}const min=Math.min(...c.map(x=>x.low),plan?.sl??Infinity,plan?.tp??-Infinity),max=Math.max(...c.map(x=>x.high),plan?.sl??-Infinity,plan?.tp??Infinity),range=max-min||1;let out=c.map((x,i)=>{const top=(max-x.high)/range*100,h=Math.max(3,(x.high-x.low)/range*100),body=Math.max(2,Math.abs(x.close-x.open)/range*100),cls=x.close>=x.open?"up":"down";return'<span class="candle" style="left:'+(i/(c.length-1)*96)+'%;top:'+top+'%;height:'+h+'%"><i class="'+cls+'" style="height:'+body+'%"></i></span>'}).join("");if(plan){for(const [k,label,v] of [["entry","ENTRY",plan.entry],["sl","SL",plan.sl],["tp","TP",plan.tp]]){const y=Math.max(1,Math.min(99,(max-v)/range*100));out+='<div class="price-level level-'+k+'" style="top:'+y+'%"><span>'+label+" "+v.toFixed(2)+"</span></div>"}}e.innerHTML=out}
@@ -89,6 +132,6 @@ $("dashboard-toggle").onclick=async()=>setBot(!state.user.settings.autoTrade);$(
 $("settings-form").addEventListener("submit",async e=>{e.preventDefault();const p=settingsPayload();if(p.autoTrade&&!state.user?.mt5?.connected){p.autoTrade=false;$("s-auto").checked=false;toast("MT5 must be connected before Trade Monitor can run.")}try{const r=await api("/api/settings",{method:"POST",body:JSON.stringify(p)});state.user.settings=r.settings;applyUser();$("settings-msg").textContent="Saved.";setTimeout(()=>$("settings-msg").textContent="",2500)}catch(err){$("settings-msg").textContent=err.message}});
 $("mt5-form").addEventListener("submit",async e=>{e.preventDefault();try{const r=await api("/api/mt5/connect",{method:"POST",body:JSON.stringify({broker:$("m-broker").value,server:$("m-server").value,login:$("m-login").value,password:$("m-password").value})});state.user.mt5=r.mt5;applyUser();$("mt5-message").textContent=r.message;let n=0;const poll=setInterval(async()=>{n++;try{const x=await api("/api/mt5/status");state.user.mt5=x.mt5;applyUser();if(x.mt5.setupStatus==="READY"||x.mt5.setupStatus==="ERROR"){clearInterval(poll);$("mt5-message").textContent=x.mt5.setupStatus==="READY"?"MetaApi MT5 connected.":"MetaApi: "+(x.mt5.error||"connection failed");if(x.mt5.setupStatus==="READY")loadMetaMarkets()}}catch{}if(n>=40)clearInterval(poll)},3000)}catch(err){$("mt5-message").textContent=err.message}});
 $("selected-market").onchange=()=>{state.symbol=$("selected-market").value;state.prices=[];state.candles=[];state.analysis=null;$("signal-side").textContent="WAIT";$("signal-strength").textContent="Loading market data...";$("market-api-status").textContent="CONNECTING";$("analysis-live-dot").className="";$("footer-live-dot").className="";refreshMetaMarket()};
-$("timeframe").onchange=()=>{if(state.user?.mt5?.connected)refreshMetaMarket()};
+$("timeframe").onchange=()=>refreshMetaMarket();
 buildTicker();if(state.token)showApp();else $("access-screen").classList.remove("hidden");setInterval(refreshState,5000);
 setInterval(()=>{if(state.user?.mt5?.connected)loadMetaMarkets()},120000);

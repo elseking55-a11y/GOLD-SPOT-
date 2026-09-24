@@ -27,7 +27,7 @@
   <div id="app" class="hidden">
     <header class="topbar">
       <div class="logo"><span>GOLD</span> SPOT</div>
-      <div class="top-status"><span id="deriv-dot" class="dot"></span><span id="deriv-status">Connecting to Deriv...</span></div>
+      <div class="top-status"><span id="deriv-dot" class="dot"></span><span id="deriv-status">Market data offline</span></div>
       <button id="logout" class="ghost">LOCK</button>
     </header>
 
@@ -72,21 +72,56 @@
       </section>
 
       <section id="tab-analysis" class="tab">
-        <div class="panel">
-          <div class="panel-head"><h3>Market Analysis</h3><div class="analysis-controls"><select id="selected-market"><option>Connecting to Deriv API...</option></select><select id="timeframe"><option value="60">1 Minute</option><option value="300" selected>5 Minutes</option><option value="900">15 Minutes</option><option value="3600">1 Hour</option><option value="14400">4 Hours</option></select></div>
-          <div class="price-line"><span id="selected-market-name">Waiting for Deriv market...</span><strong id="market-api-status">CONNECTING TO DERIV API...</strong></div>
-          <div class="price-line"><span>LIVE PRICE</span><strong id="analysis-price">—</strong></div>
-          <div id="chart" class="chart"></div><div id="trade-plan" class="trade-plan"><div><span>SIGNAL PLAN</span><b id="plan-side">WAIT</b></div><div><span>ENTRY</span><b id="plan-entry">—</b></div><div><span>STOP LOSS</span><b id="plan-sl">—</b></div><div><span>TAKE PROFIT</span><b id="plan-tp">—</b></div><div><span>RISK / REWARD</span><b id="plan-rr">—</b></div></div>
-          <div class="analysis-grid">
-            <div><span>TREND</span><b id="a-trend">—</b></div><div><span>MOMENTUM</span><b id="a-momentum">—</b></div><div><span>RSI</span><b id="a-rsi">—</b></div><div><span>SMA 20</span><b id="a-sma20">—</b></div><div><span>SMA 50</span><b id="a-sma50">—</b></div><div><span>SUPPORT</span><b id="a-support">—</b></div><div><span>RESISTANCE</span><b id="a-resistance">—</b></div><div><span>SIGNAL</span><b id="a-signal">WAIT</b></div>
+        <div class="analysis-terminal">
+          <div class="analysis-header">
+            <div class="instrument">
+              <div class="instrument-icon">XAU</div>
+              <div>
+                <div class="instrument-name">Gold Spot</div>
+                <div class="instrument-symbol" id="selected-market-name">XAU/USD • waiting for market data</div>
+              </div>
+            </div>
+            <div class="live-indicator"><i id="analysis-live-dot"></i><span id="market-api-status">CONNECTING</span></div>
           </div>
-          
+
+          <div class="analysis-toolbar">
+            <div class="market-select-wrap"><span>MARKET</span><select id="selected-market"><option>Loading markets...</option></select></div>
+            <div class="timeframe-wrap"><span>TIMEFRAME</span><select id="timeframe"><option value="60">1 Minute</option><option value="300" selected>5 Minutes</option><option value="900">15 Minutes</option><option value="3600">1 Hour</option><option value="14400">4 Hours</option></select></div>
+            <div class="terminal-price"><span>LIVE PRICE</span><strong id="analysis-price">—</strong></div>
+          </div>
+
+          <div class="chart-shell">
+            <div class="chart-topline"><span>PRICE ACTION</span><span id="analysis-candle-status">Live market feed</span></div>
+            <div id="chart" class="chart"><div class="chart-empty">Waiting for live market data…</div></div>
+          </div>
+
+          <div id="trade-plan" class="trade-plan">
+            <div><span>SIGNAL</span><b id="plan-side">WAIT</b></div>
+            <div><span>ENTRY</span><b id="plan-entry">—</b></div>
+            <div><span>STOP LOSS</span><b id="plan-sl">—</b></div>
+            <div><span>TAKE PROFIT</span><b id="plan-tp">—</b></div>
+            <div><span>RISK / REWARD</span><b id="plan-rr">—</b></div>
+          </div>
+
+          <div class="analysis-grid">
+            <div><span>TREND</span><b id="a-trend">—</b></div>
+            <div><span>MOMENTUM</span><b id="a-momentum">—</b></div>
+            <div><span>RSI</span><b id="a-rsi">—</b></div>
+            <div><span>SMA 20</span><b id="a-sma20">—</b></div>
+            <div><span>SMA 50</span><b id="a-sma50">—</b></div>
+            <div><span>SUPPORT</span><b id="a-support">—</b></div>
+            <div><span>RESISTANCE</span><b id="a-resistance">—</b></div>
+            <div><span>SIGNAL</span><b id="a-signal">WAIT</b></div>
+          </div>
+          <div class="analysis-footer"><span><i id="footer-live-dot"></i> Deriv public market data</span><span>Analysis only • live orders require user confirmation</span></div>
         </div>
       </section>
 
-      <section id="tab-markets" class="tab"><div class="panel"><div class="panel-head"><h3>All Deriv Markets</h3><span id="market-scan-status">Waiting...</span></div><p class="muted">Scans the currently active Deriv symbols and calculates technical BUY / SELL / WAIT signals from recent candles. Analysis only.</p><div id="market-summary" class="market-summary"></div><div id="market-list" class="market-list"><div class="empty">Waiting for Deriv market symbols...</div></div></div></section><section id="tab-bot" class="tab">
+      <section id="tab-markets" class="tab"><div class="panel"><div class="panel-head"><h3>All Deriv Markets</h3><span id="market-scan-status">Waiting...</span></div><p class="muted">Scans the currently active Deriv symbols and calculates technical BUY / SELL / WAIT signals from recent candles. Analysis only.</p><div id="market-summary" class="market-summary"></div><div id="market-list" class="market-list"><div class="empty">Waiting for Deriv market symbols...</div></div></div></section>
+
+      <section id="tab-bot" class="tab">
         <div class="grid two">
-          <article class="panel center"><h3>Auto Trading</h3><div id="bot-switch" class="switch off"><i></i></div><p class="muted">Monitors confirmed Gold signals and applies risk checks. Live orders require user confirmation.</p><button id="bot-toggle" class="primary">START MONITOR</button></article>
+          <article class="panel center"><h3>Trade Monitor</h3><div id="bot-switch" class="switch off"><i></i></div><p class="muted">Monitors confirmed Gold signals and applies risk checks. Live orders require user confirmation.</p><button id="bot-toggle" class="primary">START MONITOR</button></article>
           <article class="panel"><h3>Execution Rules</h3><div class="row"><span>Maximum open</span><b id="b-max-open">2</b></div><div class="row"><span>Lot</span><b id="b-lot">0.01</b></div><div class="row"><span>SL</span><b id="b-sl">ON</b></div><div class="row"><span>TP</span><b id="b-tp">ON</b></div><div class="row"><span>Martingale</span><b>OFF</b></div><div class="row"><span>Unlimited recovery</span><b>OFF</b></div></article>
         </div>
       </section>
@@ -98,22 +133,7 @@
         <form id="settings-form" class="panel settings">
           <h3>Bot Settings</h3>
           <div class="form-grid">
-            <label>Trade Monitor<input id="s-auto" type="checkbox"></label>
-            <label>Lot Size<input id="s-lot" type="number" min="0.01" step="0.01"></label>
-            <label>Maximum Open Trades<input id="s-max-open" type="number" min="1" max="20"></label>
-            <label>Maximum BUY Trades<input id="s-max-buy" type="number" min="0"></label>
-            <label>Maximum SELL Trades<input id="s-max-sell" type="number" min="0"></label>
-            <label>Stop Loss<input id="s-sl" type="checkbox"></label>
-            <label>SL Points<input id="s-sl-points" type="number" min="0"></label>
-            <label>Take Profit<input id="s-tp" type="checkbox"></label>
-            <label>TP Points<input id="s-tp-points" type="number" min="0"></label>
-            <label>Maximum Daily Loss<input id="s-daily-loss" type="number" min="0" step="0.01"></label>
-            <label>Maximum Daily Trades<input id="s-daily-trades" type="number" min="1"></label>
-            <label>Maximum Spread Points<input id="s-spread" type="number" min="0"></label>
-            <label>Allow BUY<input id="s-buy" type="checkbox"></label>
-            <label>Allow SELL<input id="s-sell" type="checkbox"></label>
-            <label>Flag Opposite Signal<input id="s-opposite" type="checkbox"></label>
-            <label>One Trade Per Signal<input id="s-one" type="checkbox"></label>
+            <label>Trade Monitor<input id="s-auto" type="checkbox"></label><label>Lot Size<input id="s-lot" type="number" min="0.01" step="0.01"></label><label>Maximum Open Trades<input id="s-max-open" type="number" min="1" max="20"></label><label>Maximum BUY Trades<input id="s-max-buy" type="number" min="0"></label><label>Maximum SELL Trades<input id="s-max-sell" type="number" min="0"></label><label>Stop Loss<input id="s-sl" type="checkbox"></label><label>SL Points<input id="s-sl-points" type="number" min="0"></label><label>Take Profit<input id="s-tp" type="checkbox"></label><label>TP Points<input id="s-tp-points" type="number" min="0"></label><label>Maximum Daily Loss<input id="s-daily-loss" type="number" min="0" step="0.01"></label><label>Maximum Daily Trades<input id="s-daily-trades" type="number" min="1"></label><label>Maximum Spread Points<input id="s-spread" type="number" min="0"></label><label>Allow BUY<input id="s-buy" type="checkbox"></label><label>Allow SELL<input id="s-sell" type="checkbox"></label><label>Flag Opposite Signal<input id="s-opposite" type="checkbox"></label><label>One Trade Per Signal<input id="s-one" type="checkbox"></label>
           </div>
           <button class="primary" type="submit">SAVE SETTINGS</button><span id="settings-msg" class="success"></span>
         </form>
@@ -121,18 +141,10 @@
 
       <section id="tab-mt5" class="tab">
         <form id="mt5-form" class="panel settings">
-          <h3>Connect MT5</h3>
-          <p class="muted">The web app does not need your MT5 password. The EA runs inside your own MT5 terminal and uses this access key to identify your account.</p>
-          <div class="form-grid">
-            <label>Broker<input id="m-broker" placeholder="Broker name"></label>
-            <label>Server<input id="m-server" placeholder="Broker-Live"></label>
-            <label>MT5 Login<input id="m-login" inputmode="numeric" placeholder="Account number"></label>
-          </div>
+          <h3>Connect MT5</h3><p class="muted">The web app does not need your MT5 password. The EA runs inside your own MT5 terminal and uses this access key to identify your account.</p>
+          <div class="form-grid"><label>Broker<input id="m-broker" placeholder="Broker name"></label><label>Server<input id="m-server" placeholder="Broker-Live"></label><label>MT5 Login<input id="m-login" inputmode="numeric" placeholder="Account number"></label></div>
           <button class="primary" type="submit">SAVE MT5 DETAILS</button>
-          <div class="mt5-guide">
-            <b>MT5 EA setup</b>
-            <ol><li>Open MT5 → MetaEditor.</li><li>Open the GoldSpotSignalBridge EA from this project.</li><li>Set AccessKey to your same key.</li><li>Set ApiBaseUrl to this website URL.</li><li>In MT5 allow the website URL under Expert Advisors → WebRequest.</li><li>Attach the EA to your XAUUSD chart.</li></ol>
-          </div>
+          <div class="mt5-guide"><b>MT5 EA setup</b><ol><li>Open MT5 → MetaEditor.</li><li>Open the GoldSpotSignalBridge EA from this project.</li><li>Set AccessKey to your same key.</li><li>Set ApiBaseUrl to this website URL.</li><li>In MT5 allow the website URL under Expert Advisors → WebRequest.</li><li>Attach the EA to your XAUUSD chart.</li></ol></div>
           <div id="mt5-message" class="success"></div>
         </form>
       </section>

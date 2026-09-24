@@ -272,7 +272,7 @@ app.get("/api/market/data", async (req, res) => {
       const price = await meta.connection.getSymbolPrice(symbol);
       let candles = [];
       try {
-        const raw = await meta.account.getHistoricalCandles(symbol, "1m");
+        const raw = await meta.account.getHistoricalCandles(symbol, "1m", undefined, 500);
         if (Array.isArray(raw)) candles = raw.slice(-500).map(x => ({
           time:new Date(x.time).getTime(), open:Number(x.open), high:Number(x.high),
           low:Number(x.low), close:Number(x.close), volume:Number(x.volume||0)
@@ -292,7 +292,7 @@ app.get("/api/market/data", async (req, res) => {
         }
         candles=[...buckets.values()].sort((a,b)=>a.time-b.time).slice(-500);
       }
-      return res.json({ok:true,source:"MetaApi",symbol,price,candles,accountId:meta.account.id});
+      return res.json({ok:true,source:"MetaApi",live:true,symbol,price,candles,accountId:meta.account.id});
     } catch (err) {
       // Fall through to the public market feed for analysis.
     }
@@ -314,7 +314,7 @@ app.get("/api/market/data", async (req, res) => {
       low:Number(q.low?.[i]), close:Number(q.close?.[i]), volume:Number(q.volume?.[i]||0)
     })).filter(x=>Number.isFinite(x.close));
     const last=candles.at(-1)?.close;
-    return res.json({ok:true,source:"Yahoo Finance",symbol:"XAUUSD",price:{bid:last,ask:last},candles});
+    return res.json({ok:true,source:"Public XAU/USD feed",live:true,symbol:"XAUUSD",price:{bid:last,ask:last},candles});
   } catch (err) {
     return res.status(502).json({ok:false,error:clean(err?.message||"Gold market data unavailable. Try again shortly.",300)});
   }
@@ -334,50 +334,103 @@ app.get("/api/market/symbols", async (req, res) => {
   return res.json({ok:true,source:"Public market feed",symbols:[{symbol:"XAUUSD",name:"Gold / US Dollar"}]});
 });
 
+async function executeLiveOrder(user, side, symbol, signalId) {
+  const meta = metaConnections.get(user.id);
+  if (!meta?.connection || !user.mt5.connected) throw new Error("MT5 is not connected through MetaApi.");
+  if (!["BUY","SELL"].includes(side)) throw new Error("Only BUY or SELL orders can be executed.");
+  if (!user.settings.autoTrade) throw new Error("Live auto-trading is OFF.");
+
+  const stats = dailyStats(user);
+  if (stats.trades >= user.settings.maxDailyTrades) throw new Error("Maximum daily trades reached.");
+  if (stats.pnl <= -Math.abs(user.settings.maxDailyLoss)) throw new Error("Maximum daily loss reached.");
+  if (getOpenCount(user) >= user.settings.maxOpenTrades) throw new Error("Maximum open trades reached.");
+  if (side === "BUY" && !user.settings.allowBuy) throw new Error("BUY trading is disabled.");
+  if (side === "SELL" && !user.settings.allowSell) throw new Error("SELL trading is disabled.");
+
+  const positions = await meta.connection.getPositions();
+  const sideCount = positions.filter(p => {
+    const ps = String(p.type || "").toUpperCase().includes("SELL") ? "SELL" : "BUY";
+    return ps === side && String(p.symbol || "") === symbol;
+  }).length;
+  if (side === "BUY" && sideCount >= user.settings.maxBuyTrades) throw new Error("Maximum BUY trades reached.");
+  if (side === "SELL" && sideCount >= user.settings.maxSellTrades) throw new Error("Maximum SELL trades reached.");
+
+  const quote = await meta.connection.getSymbolPrice(symbol);
+  const price = side === "BUY" ? Number(quote.ask) : Number(quote.bid);
+  if (!Number.isFinite(price) || price <= 0) throw new Error("No valid broker price for "+symbol+".");
+
+  const spec = await meta.connection.getSymbolSpecification(symbol);
+  const point = Number(spec?.point || 0.01);
+  const slDistance = Math.max(0, Number(user.settings.stopLossPoints || 0)) * point;
+  const tpDistance = Math.max(0, Number(user.settings.takeProfitPoints || 0)) * point;
+  const sl = user.settings.stopLoss ? (side === "BUY" ? price - slDistance : price + slDistance) : undefined;
+  const tp = user.settings.takeProfit ? (side === "BUY" ? price + tpDistance : price - tpDistance) : undefined;
+  const clientId = "GOLDSPOT_"+crypto.randomBytes(8).toString("hex");
+
+  const result = side === "BUY"
+    ? await meta.connection.createMarketBuyOrder(symbol, Number(user.settings.lotSize), sl, tp, {comment:"GOLD SPOT AUTO", clientId})
+    : await meta.connection.createMarketSellOrder(symbol, Number(user.settings.lotSize), sl, tp, {comment:"GOLD SPOT AUTO", clientId});
+
+  if (!result) throw new Error("Broker returned no trade result.");
+  user.lastExecution = {side,symbol,price,lot:Number(user.settings.lotSize),at:new Date().toISOString(),signalId:clean(signalId,80),result:result.stringCode||"EXECUTED"};
+  return {result,price,lot:Number(user.settings.lotSize)};
+}
+
 app.post("/api/bot/start", (req, res) => {
   const s = auth(req);
-  if (!s) return res.status(401).json({ ok: false, error: "Unauthorized" });
+  if (!s) return res.status(401).json({ ok:false, error:"Unauthorized" });
   const u = userFor(s);
+  if (!u.mt5.connected) return res.status(409).json({ok:false,error:"Connect MT5 through MetaApi before enabling live auto-trading."});
   u.settings.autoTrade = true;
-  res.json({ ok: true, autoTrade: true });
+  res.json({ok:true,autoTrade:true,mode:"LIVE_METAAPI"});
 });
 
 app.post("/api/bot/stop", (req, res) => {
   const s = auth(req);
-  if (!s) return res.status(401).json({ ok: false, error: "Unauthorized" });
+  if (!s) return res.status(401).json({ok:false,error:"Unauthorized"});
   const u = userFor(s);
   u.settings.autoTrade = false;
-  res.json({ ok: true, autoTrade: false });
+  res.json({ok:true,autoTrade:false,mode:"OFF"});
 });
 
-app.post("/api/signal", (req, res) => {
+app.post("/api/signal", async (req, res) => {
   const session = auth(req);
-  if (!session) return res.status(401).json({ ok: false, error: "Unauthorized" });
+  if (!session) return res.status(401).json({ok:false,error:"Unauthorized"});
   const u = userFor(session);
-  const side = clean(req.body.side, 8).toUpperCase();
-  const strength = clean(req.body.strength, 16).toUpperCase();
+  const side = clean(req.body.side,8).toUpperCase();
+  const strength = clean(req.body.strength,16).toUpperCase();
+  const symbol = clean(req.body.symbol || u.settings.symbol || "XAUUSD",50);
   const price = Number(req.body.price);
-  const signalId = clean(req.body.signalId, 80);
-  if (!["BUY", "SELL", "WAIT"].includes(side)) return res.status(400).json({ ok: false, error: "Invalid signal" });
+  const signalId = clean(req.body.signalId || "",80);
+  if (!["BUY","SELL","WAIT"].includes(side)) return res.status(400).json({ok:false,error:"Invalid signal"});
+  u.lastSignal={side,strength,price:Number.isFinite(price)?price:null,at:new Date().toISOString(),symbol};
+  if (side==="WAIT" || strength!=="STRONG") return res.json({ok:true,action:"MONITORING",executed:false,side,strength});
+  if (!u.settings.autoTrade) return res.json({ok:true,action:"READY",executed:false,reason:"Live auto-trading is OFF.",side,strength});
+  if (signalId && u.lastSignalId===signalId) return res.json({ok:true,action:"DUPLICATE",executed:false,side,strength});
+  try {
+    const execution=await executeLiveOrder(u,side,symbol,signalId);
+    u.lastSignalId=signalId || crypto.randomBytes(8).toString("hex");
+    return res.json({ok:true,action:"EXECUTED",executed:true,side,strength,symbol,execution:{price:execution.price,lot:execution.lot,result:execution.result?.stringCode||"EXECUTED"}});
+  } catch(err) {
+    return res.status(409).json({ok:false,action:"BLOCKED",executed:false,error:clean(err?.message||"Live order failed",300),side,strength});
+  }
+});
 
-  u.lastSignal = { side, strength, price: Number.isFinite(price) ? price : null, at: new Date().toISOString() };
-  const stats = dailyStats(u);
-  const checks = {
-    monitorEnabled: u.settings.autoTrade,
-    mt5Connected: u.mt5.connected,
-    strongSignal: strength === "STRONG",
-    dailyTradeLimit: stats.trades < u.settings.maxDailyTrades,
-    dailyLossLimit: stats.pnl > -Math.abs(u.settings.maxDailyLoss),
-    sideAllowed: side === "BUY" ? u.settings.allowBuy : side === "SELL" ? u.settings.allowSell : true,
-    openLimit: getOpenCount(u) < u.settings.maxOpenTrades
-  };
-  const ready = side !== "WAIT" && Object.values(checks).every(Boolean);
-  res.json({
-    ok: true,
-    action: ready ? "READY_FOR_CONFIRMATION" : "MONITORING",
-    reason: ready ? "Risk checks passed. User confirmation is required before live execution." : "Signal is being monitored or one or more risk checks are not satisfied.",
-    checks, side, strength, price: Number.isFinite(price) ? price : null, signalId
-  });
+app.post("/api/trade/market", async (req, res) => {
+  const s=auth(req);
+  if(!s) return res.status(401).json({ok:false,error:"Unauthorized"});
+  const u=userFor(s);
+  if(!u.mt5.connected) return res.status(409).json({ok:false,error:"MT5 is not connected through MetaApi."});
+  const wasAuto=u.settings.autoTrade;
+  u.settings.autoTrade=true;
+  try {
+    const side=clean(req.body.side,8).toUpperCase();
+    const symbol=clean(req.body.symbol || u.settings.symbol || "XAUUSD",50);
+    const execution=await executeLiveOrder(u,side,symbol,"MANUAL_"+Date.now());
+    return res.json({ok:true,executed:true,side,symbol,execution:{price:execution.price,lot:execution.lot,result:execution.result?.stringCode||"EXECUTED"}});
+  } catch(err) {
+    return res.status(409).json({ok:false,error:clean(err?.message||"Manual live order failed",300)});
+  } finally { u.settings.autoTrade=wasAuto; }
 });
 
 app.get("/api/mt5/command", (req, res) => {
@@ -386,7 +439,7 @@ app.get("/api/mt5/command", (req, res) => {
   const userId = crypto.createHash("sha256").update(key).digest("hex").slice(0, 16);
   const u = users.get(userId);
   if (!u) return res.status(404).send("ERROR|USER_NOT_FOUND");
-  u.mt5.connected = true;
+  // Legacy polling cannot establish a broker connection; MetaApi is authoritative.
   u.mt5.lastSeen = new Date().toISOString();
   if (req.query.login) u.mt5.login = clean(req.query.login, 40);
   if (req.query.broker) u.mt5.broker = clean(req.query.broker, 80);

@@ -304,7 +304,7 @@ app.post("/api/mt5/connect", (req, res) => {
   const data = { broker: req.body.broker, server: req.body.server, login: req.body.login, password: req.body.password };
   u.mt5 = { ...u.mt5, broker: clean(data.broker,80), server: clean(data.server,100), login: clean(data.login,40), connected:false, connectionStatus:"CONNECTING", setupStatus:"CONNECTING", error:"" };
   connectMetaAccount(s.userId, data);
-  res.json({ ok: true, mt5: u.mt5, message: "MetaApi is connecting your MT5 account. Keep this page open and refresh status." });
+  res.json({ ok: true, mt5: u.mt5, message: "MT5 details received. MetaApi is managed by the server; you do not need a MetaApi account or token. Keep this page open while your MT5 account is connected." });
 });
 
 app.get("/api/mt5/status", async (req, res) => {
@@ -426,7 +426,7 @@ app.get("/api/market/symbols", async (req, res) => {
 
 async function executeLiveOrder(user, side, symbol, signalId) {
   const meta = metaConnections.get(user.id);
-  if (!meta?.connection || !user.mt5.connected) throw new Error("MT5 is not connected through MetaApi.");
+  if (!meta?.connection || !user.mt5.connected) throw new Error("Your MT5 account is not connected.");
   if (!["BUY","SELL"].includes(side)) throw new Error("Only BUY or SELL orders can be executed.");
   if (!user.settings.autoTrade) throw new Error("Live auto-trading is OFF.");
 
@@ -470,7 +470,7 @@ app.post("/api/bot/start", (req, res) => {
   const s = auth(req);
   if (!s) return res.status(401).json({ ok:false, error:"Unauthorized" });
   const u = userFor(s);
-  if (!u.mt5.connected) return res.status(409).json({ok:false,error:"Connect MT5 through MetaApi before enabling live auto-trading."});
+  if (!u.mt5.connected) return res.status(409).json({ok:false,error:"Your MT5 account is not connected yet. Enter your MT5 login, server and master password first."});
   u.settings.autoTrade = true;
   res.json({ok:true,autoTrade:true,mode:"LIVE_METAAPI"});
 });

@@ -1,6 +1,11 @@
 const express = require("express");
 const crypto = require("crypto");
 const path = require("path");
+const MetaApi = require("metaapi.cloud-sdk").default;
+
+const METAAPI_TOKEN = String(process.env.METAAPI_TOKEN || "").trim();
+const metaApi = METAAPI_TOKEN ? new MetaApi(METAAPI_TOKEN) : null;
+const metaConnections = new Map();
 
 const app = express();
 const PORT = Number(process.env.PORT || 10000);
@@ -113,7 +118,7 @@ app.post("/api/access", (req, res) => {
       settings: defaultSettings(),
       positions: [],
       history: [],
-      mt5: { connected: false, login: "", broker: "", server: "", balance: null, equity: null, lastSeen: null },
+      mt5: { connected: false, login: "", broker: "", server: "", balance: null, equity: null, lastSeen: null, accountId: null, connectionStatus: "DISCONNECTED", setupStatus: "NOT_CONFIGURED", error: "" },
       lastSignal: { side: "WAIT", strength: "NONE", price: null, at: null },
       lastSignalId: null
     });
@@ -137,18 +142,125 @@ app.post("/api/settings", (req, res) => {
   res.json({ ok: true, settings: u.settings });
 });
 
+async function connectMetaAccount(userId, data) {
+  const u = users.get(userId);
+  if (!u) return;
+  if (!metaApi) {
+    u.mt5.setupStatus = "ERROR";
+    u.mt5.error = "METAAPI_TOKEN is not configured on the server.";
+    return;
+  }
+  try {
+    const login = clean(data.login, 40);
+    const server = clean(data.server, 100);
+    const broker = clean(data.broker, 80);
+    const password = String(data.password || "").trim();
+    if (!login || !server || !password) throw new Error("MT5 login, password and server are required.");
+    u.mt5 = { ...u.mt5, broker, server, login, connected: false, connectionStatus: "CONNECTING", setupStatus: "CONNECTING", error: "" };
+
+    const accounts = await metaApi.metatraderAccountApi.getAccountsWithInfiniteScrollPagination();
+    let account = accounts.find(a => String(a.login) === login && String(a.server || "").toLowerCase() === server.toLowerCase() && String(a.type || "").startsWith("cloud"));
+    if (!account) {
+      account = await metaApi.metatraderAccountApi.createAccount({
+        name: "Gold Spot " + login,
+        type: "cloud-g2",
+        login,
+        password,
+        server,
+        platform: "mt5",
+        magic: 254001,
+        manualTrades: true,
+        quoteStreamingIntervalInSeconds: 0
+      });
+    }
+    await account.deploy();
+    await account.waitConnected();
+
+    const connection = account.getRPCConnection();
+    await connection.connect();
+    await connection.waitSynchronized();
+
+    const info = await connection.getAccountInformation();
+    metaConnections.set(userId, { account, connection, symbols: null, symbol: null, connectedAt: Date.now() });
+
+    u.mt5 = {
+      ...u.mt5,
+      connected: true,
+      connectionStatus: "CONNECTED",
+      setupStatus: "READY",
+      accountId: account.id,
+      balance: Number(info.balance),
+      equity: Number(info.equity),
+      lastSeen: new Date().toISOString(),
+      error: ""
+    };
+  } catch (err) {
+    u.mt5.connected = false;
+    u.mt5.connectionStatus = "ERROR";
+    u.mt5.setupStatus = "ERROR";
+    u.mt5.error = clean(err?.message || err?.details || "MetaApi connection failed", 300);
+  }
+}
+
 app.post("/api/mt5/connect", (req, res) => {
   const s = auth(req);
   if (!s) return res.status(401).json({ ok: false, error: "Unauthorized" });
   const u = userFor(s);
-  u.mt5 = {
-    ...u.mt5,
-    broker: clean(req.body.broker, 80),
-    server: clean(req.body.server, 100),
-    login: clean(req.body.login, 40),
-    connected: false
-  };
-  res.json({ ok: true, mt5: u.mt5, message: "Install the EA and use this access key to complete the MT5 connection." });
+  const data = { broker: req.body.broker, server: req.body.server, login: req.body.login, password: req.body.password };
+  u.mt5 = { ...u.mt5, broker: clean(data.broker,80), server: clean(data.server,100), login: clean(data.login,40), connected:false, connectionStatus:"CONNECTING", setupStatus:"CONNECTING", error:"" };
+  connectMetaAccount(s.userId, data);
+  res.json({ ok: true, mt5: u.mt5, message: "MetaApi is connecting your MT5 account. Keep this page open and refresh status." });
+});
+
+app.get("/api/mt5/status", async (req, res) => {
+  const s = auth(req);
+  if (!s) return res.status(401).json({ ok: false, error: "Unauthorized" });
+  const u = userFor(s);
+  const c = metaConnections.get(s.userId);
+  if (c?.connection) {
+    try {
+      const info = await c.connection.getAccountInformation();
+      u.mt5.balance = Number(info.balance);
+      u.mt5.equity = Number(info.equity);
+      u.mt5.connected = true;
+      u.mt5.connectionStatus = "CONNECTED";
+      u.mt5.setupStatus = "READY";
+      u.mt5.lastSeen = new Date().toISOString();
+    } catch {}
+  }
+  res.json({ ok:true, mt5:u.mt5 });
+});
+
+app.get("/api/market/data", async (req, res) => {
+  const s = auth(req);
+  if (!s) return res.status(401).json({ ok:false, error:"Unauthorized" });
+  const c = metaConnections.get(s.userId);
+  if (!c?.connection || !userFor(s).mt5.connected) return res.status(409).json({ ok:false, error:"MT5 is not connected to MetaApi" });
+  const symbol = clean(req.query.symbol || "XAUUSD", 50);
+  const timeframe = Math.max(1, Number(req.query.timeframe || 300));
+  const map = {60:"1m",300:"1m",900:"1m",3600:"1m",14400:"1m"};
+  try {
+    const price = await c.connection.getSymbolPrice(symbol);
+    const raw = await c.account.getHistoricalCandles(symbol, map[timeframe] || "1m");
+    const candles = Array.isArray(raw) ? raw.slice(-500).map(x => ({ time:new Date(x.time).getTime(), open:Number(x.open), high:Number(x.high), low:Number(x.low), close:Number(x.close), volume:Number(x.volume||0) })) : [];
+    res.json({ok:true,source:"MetaApi",symbol,price,candles,accountId:c.account.id});
+  } catch (err) {
+    res.status(502).json({ok:false,error:clean(err?.message || "MetaApi market data failed",300)});
+  }
+});
+
+app.get("/api/market/symbols", async (req, res) => {
+  const s = auth(req);
+  if (!s) return res.status(401).json({ok:false,error:"Unauthorized"});
+  const c = metaConnections.get(s.userId);
+  if (!c?.connection || !userFor(s).mt5.connected) return res.status(409).json({ok:false,error:"MT5 is not connected to MetaApi"});
+  try {
+    const symbols = await c.connection.getSymbols();
+    const specs = Array.isArray(symbols) ? symbols : [];
+    res.json({ok:true,source:"MetaApi",symbols:specs});
+  } catch (err) {
+    res.status(502).json({ok:false,error:clean(err?.message || "MetaApi symbols failed",300)});
+  }
 });
 
 app.post("/api/bot/start", (req, res) => {

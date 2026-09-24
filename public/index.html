@@ -39,7 +39,7 @@
 
       <nav class="nav">
         <button data-tab="dashboard" class="active">Dashboard</button>
-        <button data-tab="analysis">Gold Analysis</button>
+        <button data-tab="analysis">Gold Analysis</button><button data-tab="markets">All Markets</button>
         <button data-tab="bot">Bot Control</button>
         <button data-tab="trades">Open Trades</button>
         <button data-tab="history">Trade History</button>
@@ -83,7 +83,7 @@
         </div>
       </section>
 
-      <section id="tab-bot" class="tab">
+      <section id="tab-markets" class="tab"><div class="panel"><div class="panel-head"><h3>All Deriv Markets</h3><span id="market-scan-status">Waiting...</span></div><p class="muted">Scans the currently active Deriv symbols and calculates technical BUY / SELL / WAIT signals from recent candles. Analysis only.</p><div id="market-summary" class="market-summary"></div><div id="market-list" class="market-list"><div class="empty">Waiting for Deriv market symbols...</div></div></div></section><section id="tab-bot" class="tab">
         <div class="grid two">
           <article class="panel center"><h3>Auto Trading</h3><div id="bot-switch" class="switch off"><i></i></div><p class="muted">Only confirmed STRONG signals can queue an MT5 order.</p><button id="bot-toggle" class="primary">START BOT</button></article>
           <article class="panel"><h3>Execution Rules</h3><div class="row"><span>Maximum open</span><b id="b-max-open">2</b></div><div class="row"><span>Lot</span><b id="b-lot">0.01</b></div><div class="row"><span>SL</span><b id="b-sl">ON</b></div><div class="row"><span>TP</span><b id="b-tp">ON</b></div><div class="row"><span>Martingale</span><b>OFF</b></div><div class="row"><span>Unlimited recovery</span><b>OFF</b></div></article>

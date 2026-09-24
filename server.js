@@ -168,9 +168,9 @@ app.post("/api/bot/stop", (req, res) => {
 });
 
 app.post("/api/signal", (req, res) => {
-  const s = auth(req);
-  if (!s) return res.status(401).json({ ok: false, error: "Unauthorized" });
-  const u = userFor(s);
+  const session = auth(req);
+  if (!session) return res.status(401).json({ ok: false, error: "Unauthorized" });
+  const u = userFor(session);
   const side = clean(req.body.side, 8).toUpperCase();
   const strength = clean(req.body.strength, 16).toUpperCase();
   const price = Number(req.body.price);
@@ -178,45 +178,23 @@ app.post("/api/signal", (req, res) => {
   if (!["BUY", "SELL", "WAIT"].includes(side)) return res.status(400).json({ ok: false, error: "Invalid signal" });
 
   u.lastSignal = { side, strength, price: Number.isFinite(price) ? price : null, at: new Date().toISOString() };
-  if (!u.settings.autoTrade || side === "WAIT" || strength !== "STRONG") {
-    return res.json({ ok: true, action: "WAIT", reason: "Auto trade is off or signal is not strongly confirmed." });
-  }
-  if (!u.mt5.connected) return res.json({ ok: true, action: "WAIT", reason: "MT5 is not connected." });
-
   const stats = dailyStats(u);
-  if (stats.trades >= u.settings.maxDailyTrades) return res.json({ ok: true, action: "BLOCKED", reason: "Maximum daily trades reached." });
-  if (stats.pnl <= -Math.abs(u.settings.maxDailyLoss)) return res.json({ ok: true, action: "BLOCKED", reason: "Maximum daily loss reached." });
-  if (side === "BUY" && !u.settings.allowBuy) return res.json({ ok: true, action: "BLOCKED", reason: "BUY disabled." });
-  if (side === "SELL" && !u.settings.allowSell) return res.json({ ok: true, action: "BLOCKED", reason: "SELL disabled." });
-
-  const opposite = side === "BUY" ? "SELL" : "BUY";
-  const oppositePositions = u.positions.filter(p => p.status === "OPEN" && p.side === opposite);
-  if (u.settings.closeOnOppositeSignal && oppositePositions.length) {
-    for (const p of oppositePositions) {
-      commands.set(u.id, { type: "CLOSE_TICKET", ticket: p.ticket, reason: "Opposite confirmed signal" });
-    }
-    return res.json({ ok: true, action: "CLOSE_OPPOSITE", count: oppositePositions.length });
-  }
-
-  if (getOpenCount(u) >= u.settings.maxOpenTrades) return res.json({ ok: true, action: "BLOCKED", reason: "Maximum open trades reached." });
-  if (getOpenCount(u, side) >= (side === "BUY" ? u.settings.maxBuyTrades : u.settings.maxSellTrades)) {
-    return res.json({ ok: true, action: "BLOCKED", reason: "Maximum side trades reached." });
-  }
-  if (u.settings.oneTradePerSignal && u.lastSignalId === signalId) {
-    return res.json({ ok: true, action: "BLOCKED", reason: "Signal already processed." });
-  }
-
-  u.lastSignalId = signalId;
-  commands.set(u.id, {
-    type: "OPEN",
-    side,
-    lot: u.settings.lotSize,
-    slPoints: u.settings.stopLoss ? u.settings.stopLossPoints : 0,
-    tpPoints: u.settings.takeProfit ? u.settings.takeProfitPoints : 0,
-    symbol: u.settings.symbol,
-    signalId
+  const checks = {
+    monitorEnabled: u.settings.autoTrade,
+    mt5Connected: u.mt5.connected,
+    strongSignal: strength === "STRONG",
+    dailyTradeLimit: stats.trades < u.settings.maxDailyTrades,
+    dailyLossLimit: stats.pnl > -Math.abs(u.settings.maxDailyLoss),
+    sideAllowed: side === "BUY" ? u.settings.allowBuy : side === "SELL" ? u.settings.allowSell : true,
+    openLimit: getOpenCount(u) < u.settings.maxOpenTrades
+  };
+  const ready = side !== "WAIT" && Object.values(checks).every(Boolean);
+  res.json({
+    ok: true,
+    action: ready ? "READY_FOR_CONFIRMATION" : "MONITORING",
+    reason: ready ? "Risk checks passed. User confirmation is required before live execution." : "Signal is being monitored or one or more risk checks are not satisfied.",
+    checks, side, strength, price: Number.isFinite(price) ? price : null, signalId
   });
-  res.json({ ok: true, action: "OPEN_QUEUED", side, lot: u.settings.lotSize });
 });
 
 app.get("/api/mt5/command", (req, res) => {

@@ -22,8 +22,8 @@ async function refreshMetaMarket(){try{
   $("meta-status").textContent="MetaApi connected • "+symbol;
   $("meta-dot").className="dot live";
 }catch(err){
-  $("MetaApi-dot").className="dot bad";
-  $("MetaApi-status").textContent=err.message||"MetaApi market data unavailable";
+  $("meta-dot").className="dot bad";
+  $("meta-status").textContent=err.message||"MetaApi market data unavailable";
   $("market-api-status").textContent="WAITING FOR MT5";
 }}
 function aggregateCandles(candles,seconds){
@@ -51,7 +51,7 @@ async function loadMetaMarkets(){
     renderMetaMarkets();
   }catch(err){
     $("market-api-status").textContent="MT5 NOT CONNECTED";
-    $("MetaApi-status").textContent=err.message||"Connect MT5 through MetaApi";
+    $("meta-status").textContent=err.message||"Connect MT5 through MetaApi";
     $("market-list").innerHTML='<div class="empty">Connect an MT5 account to MetaApi to load broker markets.</div>';
   }
 }

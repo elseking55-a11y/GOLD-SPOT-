@@ -241,8 +241,26 @@ app.get("/api/market/data", async (req, res) => {
   const map = {60:"1m",300:"1m",900:"1m",3600:"1m",14400:"1m"};
   try {
     const price = await c.connection.getSymbolPrice(symbol);
-    const raw = await c.account.getHistoricalCandles(symbol, map[timeframe] || "1m");
-    const candles = Array.isArray(raw) ? raw.slice(-500).map(x => ({ time:new Date(x.time).getTime(), open:Number(x.open), high:Number(x.high), low:Number(x.low), close:Number(x.close), volume:Number(x.volume||0) })) : [];
+    let candles = [];
+    try {
+      const raw = await c.account.getHistoricalCandles(symbol, "1m");
+      if (Array.isArray(raw)) candles = raw.slice(-500).map(x => ({ time:new Date(x.time).getTime(), open:Number(x.open), high:Number(x.high), low:Number(x.low), close:Number(x.close), volume:Number(x.volume||0) }));
+    } catch {}
+    if (candles.length < 20) {
+      const ticks = await c.account.getHistoricalTicks(symbol, new Date(Date.now() - 24 * 60 * 60 * 1000), 0);
+      const buckets = new Map();
+      for (const t of (ticks || [])) {
+        const bid = Number(t.bid), ask = Number(t.ask);
+        const p = Number.isFinite(bid) && Number.isFinite(ask) ? (bid + ask) / 2 : Number.isFinite(bid) ? bid : ask;
+        const time = new Date(t.time).getTime();
+        if (!Number.isFinite(p) || !Number.isFinite(time)) continue;
+        const key = Math.floor(time / 60000) * 60000;
+        const cndl = buckets.get(key);
+        if (!cndl) buckets.set(key, {time:key,open:p,high:p,low:p,close:p,volume:1});
+        else { cndl.high=Math.max(cndl.high,p); cndl.low=Math.min(cndl.low,p); cndl.close=p; cndl.volume++; }
+      }
+      candles = [...buckets.values()].sort((a,b)=>a.time-b.time).slice(-500);
+    }
     res.json({ok:true,source:"MetaApi",symbol,price,candles,accountId:c.account.id});
   } catch (err) {
     res.status(502).json({ok:false,error:clean(err?.message || "MetaApi market data failed",300)});

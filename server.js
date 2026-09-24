@@ -128,10 +128,36 @@ app.post("/api/access", (req, res) => {
   res.json({ ok: true, token: t, user: users.get(userId) });
 });
 
-app.get("/api/me", (req, res) => {
+app.get("/api/me", async (req, res) => {
   const s = auth(req);
   if (!s) return res.status(401).json({ ok: false, error: "Session expired" });
-  res.json({ ok: true, user: userFor(s) });
+  const u = userFor(s);
+  const c = metaConnections.get(s.userId);
+  if (c?.connection && u.mt5.connected) {
+    try {
+      const [info, positions] = await Promise.all([
+        c.connection.getAccountInformation(),
+        c.connection.getPositions()
+      ]);
+      u.mt5.balance = Number(info.balance);
+      u.mt5.equity = Number(info.equity);
+      u.mt5.lastSeen = new Date().toISOString();
+      u.positions = Array.isArray(positions) ? positions.map(p => ({
+        ticket: String(p.id || p.ticket || ""),
+        symbol: p.symbol,
+        side: String(p.type || "").toUpperCase().includes("SELL") ? "SELL" : "BUY",
+        lot: Number(p.volume || 0),
+        entry: Number(p.openPrice || 0),
+        pnl: Number(p.profit || 0),
+        status: "OPEN",
+        openedAt: p.time ? new Date(p.time).toISOString() : null
+      })) : [];
+    } catch (err) {
+      u.mt5.lastSeen = new Date().toISOString();
+      u.mt5.error = clean(err?.message || "MetaApi account refresh failed", 300);
+    }
+  }
+  res.json({ ok: true, user: u });
 });
 
 app.post("/api/settings", (req, res) => {

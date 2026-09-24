@@ -301,15 +301,13 @@ app.get("/api/market/data", async (req, res) => {
   // No broker is required for analysis. XAUUSD is read from Yahoo Finance's
   // public market chart feed; this feed may be delayed and is not a broker quote.
   const yahooSymbol = "XAUUSD=X";
-  const period2=Math.floor(Date.now()/1000);
-  const period1=period2-7*24*60*60;
   try {
     const url="https://query1.finance.yahoo.com/v8/finance/chart/"+encodeURIComponent(yahooSymbol)+
-      "?period1="+period1+"&period2="+period2+"&interval=1m&events=history";
-    const rr=await fetch(url,{headers:{"User-Agent":"Mozilla/5.0"}});
+      "?range=1d&interval=1m&events=history";
+    const rr=await fetch(url,{headers:{"User-Agent":"Mozilla/5.0","Accept":"application/json"}});
     if (!rr.ok) throw new Error("Public gold market feed unavailable");
     const j=await rr.json(), result=j?.chart?.result?.[0];
-    if (!result?.timestamp?.length) throw new Error("No XAUUSD market data returned");
+    if (!result?.timestamp?.length) throw new Error("No XAUUSD market data returned by the public feed");
     const q=result.indicators?.quote?.[0]||{};
     const candles=result.timestamp.map((t,i)=>({
       time:Number(t)*1000, open:Number(q.open?.[i]), high:Number(q.high?.[i]),
@@ -318,7 +316,7 @@ app.get("/api/market/data", async (req, res) => {
     const last=candles.at(-1)?.close;
     return res.json({ok:true,source:"Yahoo Finance",symbol:"XAUUSD",price:{bid:last,ask:last},candles});
   } catch (err) {
-    return res.status(502).json({ok:false,error:clean(err?.message||"Gold market data unavailable",300)});
+    return res.status(502).json({ok:false,error:clean(err?.message||"Gold market data unavailable. Try again shortly.",300)});
   }
 });
 

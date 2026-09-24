@@ -23,8 +23,8 @@ async function refreshMetaMarket(){try{
   $("meta-dot").className="dot live";
 }catch(err){
   $("meta-dot").className="dot bad";
-  $("meta-status").textContent=err.message||"MetaApi market data unavailable";
-  $("market-api-status").textContent="WAITING FOR MT5";
+  $("meta-status").textContent=err.message||"Public gold market data unavailable";
+  $("market-api-status").textContent="PUBLIC GOLD FEED";
 }}
 function aggregateCandles(candles,seconds){
   if(seconds<=60)return candles;

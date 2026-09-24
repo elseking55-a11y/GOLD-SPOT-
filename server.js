@@ -195,7 +195,7 @@ async function connectMetaAccount(userId, data) {
         password,
         server,
         platform: "mt5",
-        magic: 254001,
+        magic: 0,
         manualTrades: true,
         quoteStreamingIntervalInSeconds: 0
       });

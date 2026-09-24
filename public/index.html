@@ -13,7 +13,7 @@
       <div class="brand-mark">XAU</div>
       <p class="eyebrow">SMART GOLD MARKET ANALYSIS</p>
       <h1>WELCOME TO<br><span>GOLD SPOT ANALYSIS</span></h1>
-      <p class="subtitle">Live XAU/USD market data • multi-timeframe analysis • MT5 signal bridge</p>
+      <p class="subtitle">Live XAU/USD market data • multi-timeframe analysis • MetaApi MT5 connection</p>
       <form id="access-form" class="access-card">
         <label>🔑 ACCESS KEY</label>
         <input id="access-key" type="password" autocomplete="off" placeholder="Enter access key..." required>
@@ -27,7 +27,7 @@
   <div id="app" class="hidden">
     <header class="topbar">
       <div class="logo"><span>GOLD</span> SPOT</div>
-      <div class="top-status"><span id="deriv-dot" class="dot"></span><span id="deriv-status">Market data offline</span></div>
+      <div class="top-status"><span id="meta-dot" class="dot"></span><span id="meta-status">MetaApi market data offline</span></div>
       <button id="logout" class="ghost">LOCK</button>
     </header>
 
@@ -113,11 +113,11 @@
             <div><span>RESISTANCE</span><b id="a-resistance">—</b></div>
             <div><span>SIGNAL</span><b id="a-signal">WAIT</b></div>
           </div>
-          <div class="analysis-footer"><span><i id="footer-live-dot"></i> Deriv public market data</span><span>Analysis only • live orders require user confirmation</span></div>
+          <div class="analysis-footer"><span><i id="footer-live-dot"></i> MetaApi MT5 market data</span><span>Analysis only • live orders require user confirmation</span></div>
         </div>
       </section>
 
-      <section id="tab-markets" class="tab"><div class="panel"><div class="panel-head"><h3>All Deriv Markets</h3><span id="market-scan-status">Waiting...</span></div><p class="muted">Scans the currently active Deriv symbols and calculates technical BUY / SELL / WAIT signals from recent candles. Analysis only.</p><div id="market-summary" class="market-summary"></div><div id="market-list" class="market-list"><div class="empty">Waiting for Deriv market symbols...</div></div></div></section>
+      <section id="tab-markets" class="tab"><div class="panel"><div class="panel-head"><h3>All MT5 Markets</h3><span id="market-scan-status">Waiting...</span></div><p class="muted">Shows the symbols provided by the connected MT5 broker through MetaApi. Select a market to load its price and analysis.</p><div id="market-summary" class="market-summary"></div><div id="market-list" class="market-list"><div class="empty">Waiting for Deriv market symbols...</div></div></div></section>
 
       <section id="tab-bot" class="tab">
         <div class="grid two">
@@ -142,9 +142,9 @@
       <section id="tab-mt5" class="tab">
         <form id="mt5-form" class="panel settings">
           <h3>Connect MT5</h3><p class="muted">The web app does not need your MT5 password. The EA runs inside your own MT5 terminal and uses this access key to identify your account.</p>
-          <div class="form-grid"><label>Broker<input id="m-broker" placeholder="Broker name"></label><label>Server<input id="m-server" placeholder="Broker-Live"></label><label>MT5 Login<input id="m-login" inputmode="numeric" placeholder="Account number"></label></div>
+          <div class="form-grid"><label>Broker<input id="m-broker" placeholder="Broker name"></label><label>Server<input id="m-server" placeholder="Broker-Live"></label><label>MT5 Login<input id="m-login" inputmode="numeric" placeholder="Account number"></label><label>MT5 Password<input id="m-password" type="password" autocomplete="off" placeholder="MT5 password"></label></div>
           <button class="primary" type="submit">SAVE MT5 DETAILS</button>
-          <div class="mt5-guide"><b>MT5 EA setup</b><ol><li>Open MT5 → MetaEditor.</li><li>Open the GoldSpotSignalBridge EA from this project.</li><li>Set AccessKey to your same key.</li><li>Set ApiBaseUrl to this website URL.</li><li>In MT5 allow the website URL under Expert Advisors → WebRequest.</li><li>Attach the EA to your XAUUSD chart.</li></ol></div>
+          <div class="mt5-guide"><b>MetaApi connection</b><ol><li>Enter your broker, MT5 server, login and password.</li><li>Tap SAVE MT5 DETAILS.</li><li>The server sends the account to MetaApi and waits for the broker connection.</li><li>When MetaApi reports CONNECTED, Gold analysis and market data become available.</li></ol><p class="muted">Your MetaApi API token stays on the server as an environment variable; it is never placed in this page.</p></div>
           <div id="mt5-message" class="success"></div>
         </form>
       </section>

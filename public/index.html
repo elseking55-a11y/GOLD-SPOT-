@@ -13,7 +13,7 @@
       <div class="brand-mark">XAU</div>
       <p class="eyebrow">SMART GOLD MARKET ANALYSIS</p>
       <h1>WELCOME TO<br><span>GOLD SPOT ANALYSIS</span></h1>
-      <p class="subtitle">Real XAU/USD market analysis • multi-timeframe signals • MetaApi MT5 execution when connected</p>
+      <p class="subtitle">Real XAU/USD market analysis • multi-timeframe signals • server-managed MT5 execution</p>
       <form id="access-form" class="access-card">
         <label>🔑 ACCESS KEY</label>
         <input id="access-key" type="password" autocomplete="off" placeholder="Enter access key..." required>
@@ -27,7 +27,7 @@
   <div id="app" class="hidden">
     <header class="topbar">
       <div class="logo"><span>GOLD</span> SPOT</div>
-      <div class="top-status"><span id="meta-dot" class="dot"></span><span id="meta-status">MetaApi market data offline</span></div>
+      <div class="top-status"><span id="meta-dot" class="dot"></span><span id="meta-status">MT5 market data offline</span></div>
       <button id="logout" class="ghost">LOCK</button>
     </header>
 
@@ -49,7 +49,7 @@
 
       <section id="tab-dashboard" class="tab active">
         <div class="grid cards">
-          <article class="card"><span>MT5</span><strong id="mt5-status">DISCONNECTED</strong><small id="mt5-broker">MetaApi Cloud — no local terminal required</small></article>
+          <article class="card"><span>MT5</span><strong id="mt5-status">DISCONNECTED</strong><small id="mt5-broker">Server-managed MT5 • no MetaApi setup for users</small></article>
           <article class="card"><span>BALANCE</span><strong id="balance">—</strong><small>Actual MT5 account</small></article>
           <article class="card"><span>EQUITY</span><strong id="equity">—</strong><small>Actual MT5 account</small></article>
           <article class="card"><span>DAILY P/L</span><strong id="daily-pnl">$0.00</strong><small id="daily-trades">0 trades today</small></article>
@@ -141,10 +141,10 @@
 
       <section id="tab-mt5" class="tab">
         <form id="mt5-form" class="panel settings">
-          <h3>Connect MT5 through MetaApi Cloud</h3><p class="muted">Gold analysis works without MT5. Connect MT5 only when you want your real balance, equity, positions, broker data, and live order execution. MetaApi runs the broker-side MT5 environment in the cloud, so the user does NOT need the MT5 Terminal open on a phone or computer.</p>
+          <h3>Connect Your MT5 Account</h3><p class="muted">Gold analysis works without MT5. To use your real balance, equity, positions, broker data and live order execution, enter your own MT5 account details. MetaApi is managed by GOLD SPOT on the server, so you do NOT need a MetaApi account, MetaApi token, or a local MT5 Terminal.</p>
           <div class="form-grid"><label>Broker<input id="m-broker" placeholder="Broker name"></label><label>Server<input id="m-server" placeholder="Broker-Live"></label><label>MT5 Login<input id="m-login" inputmode="numeric" placeholder="Account number"></label><label>MT5 Password<input id="m-password" type="password" autocomplete="off" placeholder="MT5 password"></label></div>
-          <button class="primary" type="submit">SAVE MT5 DETAILS</button>
-          <div class="mt5-guide"><b>MetaApi connection</b><ol><li>Enter your broker, MT5 server, login and password.</li><li>Tap SAVE MT5 DETAILS.</li><li>The server sends the account to MetaApi Cloud and waits for MetaApi to connect directly to the broker.</li><li>When MetaApi reports CONNECTED, your real account data and broker-specific market data become available. No local terminal is needed.</li></ol><p class="muted">Your MetaApi API token stays on the server as an environment variable; it is never placed in this page.</p></div>
+          <button class="primary" type="submit">CONNECT MT5</button>
+          <div class="mt5-guide"><b>Server-managed MetaApi</b><ol><li>Enter your broker, exact MT5 server, login and master trading password.</li><li>Tap CONNECT MT5.</li><li>GOLD SPOT securely sends the credentials to MetaApi from the server.</li><li>When CONNECTED, this user sees only this MT5 account balance, positions and trading data. No local terminal is needed.</li></ol><p class="muted">Users never enter a MetaApi token. The MetaApi API token stays on the server and is never sent to the browser.</p></div>
           <div id="mt5-message" class="success"></div>
         </form>
       </section>

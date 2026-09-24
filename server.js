@@ -133,7 +133,7 @@ app.post("/api/settings", (req, res) => {
   const s = auth(req);
   if (!s) return res.status(401).json({ ok: false, error: "Unauthorized" });
   const u = userFor(s);
-  u.settings = normalizeSettings(req.body || {});
+  u.settings = normalizeSettings(req.body || {});\n  if (!u.mt5.connected) u.settings.autoTrade = false;
   res.json({ ok: true, settings: u.settings });
 });
 

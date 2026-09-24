@@ -260,52 +260,80 @@ app.get("/api/mt5/status", async (req, res) => {
 
 app.get("/api/market/data", async (req, res) => {
   const s = auth(req);
-  if (!s) return res.status(401).json({ ok:false, error:"Unauthorized" });
-  const c = metaConnections.get(s.userId);
-  if (!c?.connection || !userFor(s).mt5.connected) return res.status(409).json({ ok:false, error:"MT5 is not connected to MetaApi" });
+  if (!s) return res.status(401).json({ok:false,error:"Unauthorized"});
+
   const symbol = clean(req.query.symbol || "XAUUSD", 50);
   const timeframe = Math.max(1, Number(req.query.timeframe || 300));
-  const map = {60:"1m",300:"1m",900:"1m",3600:"1m",14400:"1m"};
-  try {
-    const price = await c.connection.getSymbolPrice(symbol);
-    let candles = [];
+  const meta = metaConnections.get(s.userId);
+
+  // MT5/MetaApi is optional for market analysis. Use the broker feed when connected.
+  if (meta?.connection && userFor(s).mt5.connected) {
     try {
-      const raw = await c.account.getHistoricalCandles(symbol, "1m");
-      if (Array.isArray(raw)) candles = raw.slice(-500).map(x => ({ time:new Date(x.time).getTime(), open:Number(x.open), high:Number(x.high), low:Number(x.low), close:Number(x.close), volume:Number(x.volume||0) }));
-    } catch {}
-    if (candles.length < 20) {
-      const ticks = await c.account.getHistoricalTicks(symbol, new Date(Date.now() - 24 * 60 * 60 * 1000), 0);
-      const buckets = new Map();
-      for (const t of (ticks || [])) {
-        const bid = Number(t.bid), ask = Number(t.ask);
-        const p = Number.isFinite(bid) && Number.isFinite(ask) ? (bid + ask) / 2 : Number.isFinite(bid) ? bid : ask;
-        const time = new Date(t.time).getTime();
-        if (!Number.isFinite(p) || !Number.isFinite(time)) continue;
-        const key = Math.floor(time / 60000) * 60000;
-        const cndl = buckets.get(key);
-        if (!cndl) buckets.set(key, {time:key,open:p,high:p,low:p,close:p,volume:1});
-        else { cndl.high=Math.max(cndl.high,p); cndl.low=Math.min(cndl.low,p); cndl.close=p; cndl.volume++; }
+      const price = await meta.connection.getSymbolPrice(symbol);
+      let candles = [];
+      try {
+        const raw = await meta.account.getHistoricalCandles(symbol, "1m");
+        if (Array.isArray(raw)) candles = raw.slice(-500).map(x => ({
+          time:new Date(x.time).getTime(), open:Number(x.open), high:Number(x.high),
+          low:Number(x.low), close:Number(x.close), volume:Number(x.volume||0)
+        }));
+      } catch {}
+      if (candles.length < 20) {
+        const ticks = await meta.account.getHistoricalTicks(symbol, new Date(Date.now()-24*60*60*1000), 0);
+        const buckets = new Map();
+        for (const t of (ticks || [])) {
+          const bid=Number(t.bid), ask=Number(t.ask);
+          const p=Number.isFinite(bid)&&Number.isFinite(ask)?(bid+ask)/2:Number.isFinite(bid)?bid:ask;
+          const time=new Date(t.time).getTime();
+          if (!Number.isFinite(p)||!Number.isFinite(time)) continue;
+          const key=Math.floor(time/60000)*60000, old=buckets.get(key);
+          if (!old) buckets.set(key,{time:key,open:p,high:p,low:p,close:p,volume:1});
+          else {old.high=Math.max(old.high,p);old.low=Math.min(old.low,p);old.close=p;old.volume++}
+        }
+        candles=[...buckets.values()].sort((a,b)=>a.time-b.time).slice(-500);
       }
-      candles = [...buckets.values()].sort((a,b)=>a.time-b.time).slice(-500);
+      return res.json({ok:true,source:"MetaApi",symbol,price,candles,accountId:meta.account.id});
+    } catch (err) {
+      // Fall through to the public market feed for analysis.
     }
-    res.json({ok:true,source:"MetaApi",symbol,price,candles,accountId:c.account.id});
+  }
+
+  // No broker is required for analysis. XAUUSD is read from Yahoo Finance's
+  // public market chart feed; this feed may be delayed and is not a broker quote.
+  const yahooSymbol = "XAUUSD=X";
+  const period2=Math.floor(Date.now()/1000);
+  const period1=period2-7*24*60*60;
+  try {
+    const url="https://query1.finance.yahoo.com/v8/finance/chart/"+encodeURIComponent(yahooSymbol)+
+      "?period1="+period1+"&period2="+period2+"&interval=1m&events=history";
+    const rr=await fetch(url,{headers:{"User-Agent":"Mozilla/5.0"}});
+    if (!rr.ok) throw new Error("Public gold market feed unavailable");
+    const j=await rr.json(), result=j?.chart?.result?.[0];
+    if (!result?.timestamp?.length) throw new Error("No XAUUSD market data returned");
+    const q=result.indicators?.quote?.[0]||{};
+    const candles=result.timestamp.map((t,i)=>({
+      time:Number(t)*1000, open:Number(q.open?.[i]), high:Number(q.high?.[i]),
+      low:Number(q.low?.[i]), close:Number(q.close?.[i]), volume:Number(q.volume?.[i]||0)
+    })).filter(x=>Number.isFinite(x.close));
+    const last=candles.at(-1)?.close;
+    return res.json({ok:true,source:"Yahoo Finance",symbol:"XAUUSD",price:{bid:last,ask:last},candles});
   } catch (err) {
-    res.status(502).json({ok:false,error:clean(err?.message || "MetaApi market data failed",300)});
+    return res.status(502).json({ok:false,error:clean(err?.message||"Gold market data unavailable",300)});
   }
 });
 
 app.get("/api/market/symbols", async (req, res) => {
   const s = auth(req);
   if (!s) return res.status(401).json({ok:false,error:"Unauthorized"});
-  const c = metaConnections.get(s.userId);
-  if (!c?.connection || !userFor(s).mt5.connected) return res.status(409).json({ok:false,error:"MT5 is not connected to MetaApi"});
-  try {
-    const symbols = await c.connection.getSymbols();
-    const specs = Array.isArray(symbols) ? symbols : [];
-    res.json({ok:true,source:"MetaApi",symbols:specs});
-  } catch (err) {
-    res.status(502).json({ok:false,error:clean(err?.message || "MetaApi symbols failed",300)});
+  const meta = metaConnections.get(s.userId);
+  if (meta?.connection && userFor(s).mt5.connected) {
+    try {
+      const symbols = await meta.connection.getSymbols();
+      const specs = Array.isArray(symbols) ? symbols : [];
+      return res.json({ok:true,source:"MetaApi",symbols:specs});
+    } catch {}
   }
+  return res.json({ok:true,source:"Public market feed",symbols:[{symbol:"XAUUSD",name:"Gold / US Dollar"}]});
 });
 
 app.post("/api/bot/start", (req, res) => {

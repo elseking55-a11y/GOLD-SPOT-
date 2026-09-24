@@ -73,8 +73,9 @@
 
       <section id="tab-analysis" class="tab">
         <div class="panel">
-          <div class="panel-head"><h3>Gold / USD Analysis</h3><select id="timeframe"><option value="60">1 Minute</option><option value="300" selected>5 Minutes</option><option value="900">15 Minutes</option><option value="3600">1 Hour</option><option value="14400">4 Hours</option></select></div>
-          <div class="price-line"><span>XAU/USD</span><strong id="analysis-price">—</strong></div>
+          <div class="panel-head"><h3>Market Analysis</h3><div class="analysis-controls"><select id="selected-market"><option>Connecting to Deriv API...</option></select><select id="timeframe"><option value="60">1 Minute</option><option value="300" selected>5 Minutes</option><option value="900">15 Minutes</option><option value="3600">1 Hour</option><option value="14400">4 Hours</option></select></div>
+          <div class="price-line"><span id="selected-market-name">Waiting for Deriv market...</span><strong id="market-api-status">CONNECTING TO DERIV API...</strong></div>
+          <div class="price-line"><span>LIVE PRICE</span><strong id="analysis-price">—</strong></div>
           <div id="chart" class="chart"></div>
           <div class="analysis-grid">
             <div><span>TREND</span><b id="a-trend">—</b></div><div><span>MOMENTUM</span><b id="a-momentum">—</b></div><div><span>RSI</span><b id="a-rsi">—</b></div><div><span>SMA 20</span><b id="a-sma20">—</b></div><div><span>SMA 50</span><b id="a-sma50">—</b></div><div><span>SUPPORT</span><b id="a-support">—</b></div><div><span>RESISTANCE</span><b id="a-resistance">—</b></div><div><span>SIGNAL</span><b id="a-signal">WAIT</b></div>
